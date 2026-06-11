@@ -6,6 +6,16 @@ import { geocodeAddress, haversineMiles } from '../lib/geo.js'
 import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { can } from '../lib/roles.js'
 
+// Built-in example service locations (coordinates included) so the full flow —
+// ranked list, radius circles, dispatch — is clickable even on a network that
+// blocks the live geocoder/tiles. Chosen near heat-pump-capable clusters.
+const EXAMPLES = [
+  { label: 'Orlando, FL', address: 'Orlando, FL', lat: 28.5383, lng: -81.3792 },
+  { label: 'Miami, FL', address: 'Miami, FL', lat: 25.7749, lng: -80.1937 },
+  { label: 'Tampa, FL', address: 'Tampa, FL', lat: 27.9506, lng: -82.4572 },
+  { label: 'Palmdale, CA', address: 'Palmdale, CA', lat: 34.6868, lng: -118.1542 },
+]
+
 export default function MapPage() {
   const allStations = useStations()
   const role = useRole()
@@ -78,6 +88,24 @@ export default function MapPage() {
             </div>
           </form>
           {error && <div className="error">{error}</div>}
+
+          <div className="examples">
+            <span>No internet / blocked? Try an example:</span>
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex.label}
+                className="chip-mini"
+                onClick={() => {
+                  setAddress(ex.address)
+                  setConsumer(ex)
+                  setSelectedId(null)
+                  setError(null)
+                }}
+              >
+                {ex.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="results">

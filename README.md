@@ -19,7 +19,22 @@ A `localhost` link only works on the machine that is actually running the dev se
 so you have to install it locally first (this is why a bare `localhost:5173` link
 "refused to connect").
 
-### What you need to install (one time)
+#### Zero-install option (no Node, no admin rights)
+If you can't install Node (e.g. locked-down work laptop), use the **single-file
+build** instead — it's the entire app compiled into one self-contained HTML file:
+
+- Grab **`Moov-Service-Network-Demo.html`** from the repo root and **double-click it**
+  to open in any browser. Nothing to install.
+- The map tiles and live address search still need internet. If your network blocks
+  them, use the **"Try an example"** location buttons in the sidebar — they have
+  coordinates built in and run the full flow (ranked list, radius circles, dispatch,
+  analytics) offline.
+- To regenerate the file after changing the code: `npm run build` (output is
+  `dist/index.html`; copy it to `Moov-Service-Network-Demo.html`).
+
+The full dev setup below is only needed if you want hot-reload while editing.
+
+## What you need to install (one time)
 1. **Node.js LTS (v18 or newer)** — includes `npm`. Download: <https://nodejs.org>
    (this was built/tested on Node 22). Verify with `node -v`.
 2. **Git** — to download the code. Download: <https://git-scm.com>
