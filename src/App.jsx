@@ -1,10 +1,11 @@
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { ROLES } from './lib/roles.js'
+import { ROLES, can } from './lib/roles.js'
 import { useApp } from './lib/AppContext.jsx'
 import MapPage from './pages/MapPage.jsx'
 import CoveragePage from './pages/CoveragePage.jsx'
 import AnalyticsPage from './pages/AnalyticsPage.jsx'
 import StationsPage from './pages/StationsPage.jsx'
+import UsersPage from './pages/UsersPage.jsx'
 import RespondPage from './pages/RespondPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 
@@ -60,6 +61,11 @@ function Shell() {
           <NavLink to="/stations" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
             Stations {openCount ? <span className="pill">{openCount} open</span> : null}
           </NavLink>
+          {can(user.role, 'manageUsers') && (
+            <NavLink to="/users" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+              Users
+            </NavLink>
+          )}
         </nav>
 
         <div className="role-switch">
@@ -77,6 +83,7 @@ function Shell() {
           <Route path="/coverage" element={<CoveragePage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/stations" element={<StationsPage />} />
+          {can(user.role, 'manageUsers') && <Route path="/users" element={<UsersPage />} />}
           <Route path="/respond/:token" element={<RespondPage />} />
         </Routes>
       </main>

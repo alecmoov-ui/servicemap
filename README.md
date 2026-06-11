@@ -83,6 +83,10 @@ A **dispatch board** (live status timelines) and the **master station list**. Ed
 add. Master (seed) records can be edited but never deleted — the API rejects it — so the
 master map can't be destroyed.
 
+### Users (Admin only)
+An admin screen to invite/manage team members and set their role (Admin / DTM /
+Dispatch). Guardrails prevent deleting your own account or removing the last admin.
+
 ### Roles & reliability
 Permissions live in `server/src/auth.js` (enforced) and `src/lib/roles.js` (UI gating).
 The 0–100 reliability score (`src/lib/ratings.js`) blends acceptance, completion, and
@@ -118,31 +122,79 @@ src/                         # React client
     api.js                   # API client (JWT, error handling)
     AppContext.jsx           # auth + data provider (replaces localStorage)
     geo.js / ratings.js / roles.js
-  pages/  MapPage, CoveragePage, AnalyticsPage, StationsPage, LoginPage, RespondPage
+  pages/  Map, Coverage, Analytics, Stations, Users, Login, Respond
   components/  MapView, DispatchModal
   data/  stations.seed.json (the 37 stations), metros.js
 server/                      # Express + SQLite API
   src/
-    index.js                 # app entry; serves API + built client
+    index.js                 # entry: starts the server
+    app.js                   # buildApp() — used by index.js and the tests
     db.js                    # schema + row<->API mapping
     seed.js                  # seeds 37 stations + demo users
     auth.js                  # JWT + role enforcement
     tokens.js                # signed accept/decline tokens
     email.js                 # pluggable transport (log/smtp/graph)
     dispatchService.js       # status transitions + counter updates
-    routes/  auth, stations, dispatches, respond, geocode
+    routes/  auth, stations, dispatches, respond, geocode, users
+  test/api.test.js           # backend integration tests
+  scripts/backup.js          # online SQLite backup + retention
   .env.example
 scripts/geocode-stations.mjs # one-time pin refinement
+Dockerfile, render.yaml      # deployment
+.github/workflows/ci.yml     # CI: tests + build on every push
 ```
 
 ---
 
+## Deployment (hosted, persistent, always-on)
+
+The app is meant to run as one shared service your team logs into. It serves the client
+and API from a single port and stores data in SQLite on a **persistent disk** so nothing
+resets across restarts/redeploys.
+
+### Option 1 — Render (blueprint included)
+`render.yaml` defines a web service **with a 1 GB persistent disk** mounted at `/var/data`
+(the DB lives there via `DB_PATH`). In Render: **New + → Blueprint → connect this repo.**
+After the first deploy, set `APP_URL` to the live URL (used in dispatch-email links).
+`JWT_SECRET` is auto-generated and kept stable.
+
+### Option 2 — Docker (Render/Azure/Fly/VM — anywhere)
+```bash
+docker build -t moov-service .
+docker run -p 3001:3001 -v moovdata:/app/server/data \
+  -e JWT_SECRET=$(openssl rand -hex 32) -e APP_URL=https://your-url moov-service
+```
+The `-v moovdata:/app/server/data` volume is what makes data persist. Azure App Service
+(Microsoft-aligned) runs this same image with an attached storage mount.
+
+### Domain & SSL
+Optional. The host gives you a working HTTPS URL out of the box (SSL auto-issued/renewed
+— nothing to buy or install). To brand it, add a subdomain like `service.moovpool.com` in
+the host dashboard and create the one DNS record it shows you; SSL re-issues automatically.
+
+### Required production env vars
+`JWT_SECRET` (strong, stable), `APP_URL` (live URL), `DB_PATH` (on the persistent disk),
+`SEED_PASSWORD` (initial admin password). For real email, `EMAIL_TRANSPORT=graph` +
+`GRAPH_TENANT_ID`/`GRAPH_CLIENT_ID`/`GRAPH_CLIENT_SECRET`. See `server/.env.example`.
+
+## Reliability & maintenance (the safety net)
+
+- **Tests** — `npm --prefix server test` covers auth, role enforcement, master-record
+  protection, the dispatch/accept lifecycle, and user management. Run before any change.
+- **CI** — `.github/workflows/ci.yml` runs tests + build on every push/PR, so a breaking
+  change fails *before* it ships.
+- **Rollback** — every change is a Git commit; tag releases (`git tag v1.0`) to return to
+  a known-good version instantly. Hosts also keep deploy history for one-click rollback.
+- **Database backups** — code rollback does NOT restore data. Back up the SQLite file:
+  `npm --prefix server run backup` (timestamped copy in `server/data/backups`, keeps the
+  last 14). Schedule it (cron / host scheduler) daily in production.
+- **`CLAUDE.md`** — conventions and "don't break these" rules for future changes.
+
 ## What's next (roadmap)
-1. **Real dispatch email** — flip on SMTP or wire the Microsoft Graph path.
+1. **Turn on real email** — set `EMAIL_TRANSPORT=graph` + the Azure app credentials.
 2. **Email-thread ingestion** — a Graph subscription parses replies to auto-advance jobs
    to *Completed*/*Issue* and attach the conversation to the record.
-3. **User management UI** — admin screen to invite TMs/dispatchers (table + roles exist).
-4. **Demand-weighted gaps** — replace the metro list with your units-sold / RMA volume by
+3. **Demand-weighted gaps** — replace the metro list with your units-sold / RMA volume by
    region so coverage gaps reflect where failures will actually happen.
-5. **Dealer first-right-of-refusal routing** and **cost/invoice reconciliation**.
-6. **Postgres** — swap `server/src/db.js` when you outgrow SQLite.
+4. **Dealer first-right-of-refusal routing** and **cost/invoice reconciliation**.
+5. **Postgres + migrations** — swap `server/src/db.js` when you outgrow SQLite.

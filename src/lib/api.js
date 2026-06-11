@@ -44,4 +44,9 @@ export const api = {
 
   geocode: (q) => request('/geocode?q=' + encodeURIComponent(q)),
   respond: (token) => request('/respond', { method: 'POST', body: { token }, auth: false }),
+
+  getUsers: () => request('/users'),
+  createUser: (u) => request('/users', { method: 'POST', body: u }),
+  updateUser: (id, patch) => request(`/users/${id}`, { method: 'PUT', body: patch }),
+  deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
 }

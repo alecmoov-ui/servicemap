@@ -2,7 +2,7 @@
 //
 //   EMAIL_TRANSPORT=log   (default) — compose + log only, nothing is sent
 //   EMAIL_TRANSPORT=smtp           — send via SMTP (nodemailer)
-//   EMAIL_TRANSPORT=graph          — Microsoft Graph (scaffold; see note)
+//   EMAIL_TRANSPORT=graph          — Microsoft 365 via Microsoft Graph sendMail
 //
 // The composed message (incl. accept/decline links) is always returned so the
 // UI can preview it. Switch transports purely via environment variables.
@@ -61,6 +61,28 @@ function getSmtp() {
   return smtpTransport
 }
 
+// Microsoft 365 / Graph: client-credentials token, then sendMail as the mailbox.
+// Setup (one time, in Azure AD):
+//   1. App registrations -> New registration.
+//   2. API permissions -> Microsoft Graph -> Application -> Mail.Send -> Grant admin consent.
+//   3. Certificates & secrets -> new client secret.
+//   4. Set GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, SERVICE_MAILBOX.
+async function getGraphToken() {
+  const tenant = process.env.GRAPH_TENANT_ID
+  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.GRAPH_CLIENT_ID,
+      client_secret: process.env.GRAPH_CLIENT_SECRET,
+      scope: 'https://graph.microsoft.com/.default',
+      grant_type: 'client_credentials',
+    }),
+  })
+  if (!res.ok) throw new Error('Graph token request failed (' + res.status + ')')
+  return (await res.json()).access_token
+}
+
 export async function sendEmail(email) {
   const transport = (process.env.EMAIL_TRANSPORT || 'log').toLowerCase()
 
@@ -70,13 +92,24 @@ export async function sendEmail(email) {
   }
 
   if (transport === 'graph') {
-    // Microsoft Graph path for Serviceuse@moovpool.com (Microsoft 365):
-    //  1. Register an Azure AD app; grant application permission Mail.Send.
-    //  2. Get a token (client credentials) for https://graph.microsoft.com/.default.
-    //  3. POST /users/{mailbox}/sendMail with the message + saveToSentItems:true.
-    // Implement with @azure/identity + @microsoft/microsoft-graph-client, then
-    // return { mode:'graph', sent:true }. Falls through to log until wired.
-    console.warn('EMAIL_TRANSPORT=graph not yet wired; logging instead.')
+    const token = await getGraphToken()
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(SERVICE_MAILBOX)}/sendMail`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            subject: email.subject,
+            body: { contentType: 'Text', content: email.body },
+            toRecipients: [{ emailAddress: { address: email.to } }],
+          },
+          saveToSentItems: true,
+        }),
+      }
+    )
+    if (!res.ok) throw new Error('Graph sendMail failed (' + res.status + '): ' + (await res.text()))
+    return { mode: 'graph', sent: true }
   }
 
   console.info('[dispatch email — log mode]\n', `${email.subject}\nTo: ${email.to}\n${email.body}\n`)

@@ -5,7 +5,8 @@ dist
 .env
 .env.*
 
-# SQLite database (created at runtime by the server)
+# SQLite database + backups (created at runtime by the server)
 server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
+server/data/backups/
