@@ -3,6 +3,7 @@ import { ROLES } from './lib/roles.js'
 import { setRole, resetAll } from './lib/store.js'
 import { useRole, useDispatches } from './lib/useStore.js'
 import MapPage from './pages/MapPage.jsx'
+import CoveragePage from './pages/CoveragePage.jsx'
 import AnalyticsPage from './pages/AnalyticsPage.jsx'
 import StationsPage from './pages/StationsPage.jsx'
 import RespondPage from './pages/RespondPage.jsx'
@@ -27,6 +28,9 @@ export default function App() {
         <nav className="tabs">
           <NavLink to="/" end className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
             Map &amp; Dispatch
+          </NavLink>
+          <NavLink to="/coverage" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+            Zone Coverage
           </NavLink>
           <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
             Analytics
@@ -54,6 +58,7 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<MapPage />} />
+          <Route path="/coverage" element={<CoveragePage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/stations" element={<StationsPage />} />
           <Route path="/respond/:id/:action" element={<RespondPage />} />

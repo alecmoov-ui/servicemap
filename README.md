@@ -97,7 +97,20 @@ pin on save.
   additions. **Role-gated:** Admin/DTM can add & edit; Dispatch is read-only. Edits
   to master records are stored as an overlay so the original is never destroyed.
 
-### 3. Analytics
+### 3. Zone Coverage
+A second map focused on **network density and gaps**, filterable by product (or all):
+- **Density heatmap** — every station's service radius is drawn semi-transparent, so
+  areas with overlapping stations shade darker (redundant coverage) and thin areas
+  stay light.
+- **Gap detection** — major US metros are scored against your coverage. Covered metros
+  show a green ring; **uncovered metros show a red pin sized by population** = where
+  the demand is and you have no one in range.
+- **Recruiting targets** — the sidebar ranks uncovered metros by population with the
+  distance to your nearest station, plus a stations-by-state breakdown. (The metro
+  list is a stand-in for real demand data — units sold / warranty volume by region —
+  which would replace it in production.)
+
+### 4. Analytics
 - KPIs: active stations, total requests, acceptance rate, completion rate, avg
   time-to-resolution.
 - Dispatch funnel, stations-by-state (capacity & gaps), product coverage, and a
