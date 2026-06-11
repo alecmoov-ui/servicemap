@@ -49,4 +49,9 @@ export const api = {
   createUser: (u) => request('/users', { method: 'POST', body: u }),
   updateUser: (id, patch) => request(`/users/${id}`, { method: 'PUT', body: patch }),
   deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
+
+  getActivity: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()
+    return request('/activity' + (q ? '?' + q : ''))
+  },
 }

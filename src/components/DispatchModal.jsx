@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../lib/AppContext.jsx'
 
 export default function DispatchModal({ station, consumer, product, distanceMi, onClose }) {
-  const { createDispatch } = useApp()
+  const { createDispatch, user } = useApp()
   const [issue, setIssue] = useState('')
   const [consumerName, setConsumerName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -35,8 +35,8 @@ export default function DispatchModal({ station, consumer, product, distanceMi, 
           <>
             <h3>Dispatch request → {station.company}</h3>
             <p className="muted">
-              {product} · {distanceMi != null ? distanceMi.toFixed(1) + ' mi away' : ''} · sent to{' '}
-              <code>{station.email}</code>
+              {product} · {distanceMi != null ? distanceMi.toFixed(1) + ' mi away' : ''}
+              <br />from <code>{user.email}</code> → <code>{station.email}</code>
             </p>
             <label className="field">
               <span>End-user name (optional)</span>

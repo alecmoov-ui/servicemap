@@ -6,6 +6,7 @@ import CoveragePage from './pages/CoveragePage.jsx'
 import AnalyticsPage from './pages/AnalyticsPage.jsx'
 import StationsPage from './pages/StationsPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
+import ActivityPage from './pages/ActivityPage.jsx'
 import RespondPage from './pages/RespondPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 
@@ -66,6 +67,11 @@ function Shell() {
               Users
             </NavLink>
           )}
+          {can(user.role, 'viewAudit') && (
+            <NavLink to="/activity" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+              Activity
+            </NavLink>
+          )}
         </nav>
 
         <div className="role-switch">
@@ -84,6 +90,7 @@ function Shell() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/stations" element={<StationsPage />} />
           {can(user.role, 'manageUsers') && <Route path="/users" element={<UsersPage />} />}
+          {can(user.role, 'viewAudit') && <Route path="/activity" element={<ActivityPage />} />}
           <Route path="/respond/:token" element={<RespondPage />} />
         </Routes>
       </main>

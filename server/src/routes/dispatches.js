@@ -4,6 +4,7 @@ import { db, rowToStation } from '../db.js'
 import { requireAuth, requirePermission } from '../auth.js'
 import { listDispatches, getDispatch, advance } from '../dispatchService.js'
 import { buildDispatchEmail, sendEmail } from '../email.js'
+import { logFromReq } from '../activity.js'
 
 export const dispatchesRouter = Router()
 dispatchesRouter.use(requireAuth)
@@ -38,8 +39,16 @@ dispatchesRouter.post('/', requirePermission('dispatch'), async (req, res) => {
   create()
 
   const dispatch = getDispatch(id)
-  const email = buildDispatchEmail({ dispatch, station, appUrl: req.headers.origin })
+  const sender = { email: req.user.email, name: req.user.name }
+  const email = buildDispatchEmail({ dispatch, station, appUrl: req.headers.origin, sender })
   const result = await sendEmail(email)
+
+  logFromReq(req, {
+    action: 'dispatch.create',
+    entityType: 'dispatch',
+    entityId: id,
+    summary: `Dispatched ${dispatch.product} to ${station.company} (${result.mode}${result.sent ? ', sent' : ''}) for ${dispatch.consumer?.address || 'end user'}`,
+  })
   res.status(201).json({ dispatch, email, delivery: result })
 })
 
@@ -48,5 +57,11 @@ dispatchesRouter.post('/:id/events', requirePermission('dispatch'), (req, res) =
   const { status, note } = req.body || {}
   const updated = advance(req.params.id, status, note, req.user.email)
   if (!updated) return res.status(404).json({ error: 'Dispatch not found' })
+  logFromReq(req, {
+    action: 'dispatch.advance',
+    entityType: 'dispatch',
+    entityId: req.params.id,
+    summary: `Marked ${req.params.id} ${status}${note ? ` — ${note}` : ''}`,
+  })
   res.json(updated)
 })

@@ -6,6 +6,7 @@ import { Router } from 'express'
 import { db } from '../db.js'
 import { verifyResponseToken } from '../tokens.js'
 import { getDispatch, advance } from '../dispatchService.js'
+import { logActivity } from '../activity.js'
 
 export const respondRouter = Router()
 
@@ -34,5 +35,13 @@ respondRouter.post('/', (req, res) => {
   const status = decoded.action === 'accept' ? 'accepted' : 'declined'
   const dispatch = advance(row.id, status, 'Responded via email link', 'station')
   db.prepare('UPDATE dispatches SET token_used = 1 WHERE id = ?').run(row.id)
+  logActivity({
+    actor: 'station',
+    actorName: row.station_company,
+    action: 'dispatch.advance',
+    entityType: 'dispatch',
+    entityId: row.id,
+    summary: `${row.station_company} ${status} ${row.id} via email link`,
+  })
   res.json({ status, dispatch })
 })

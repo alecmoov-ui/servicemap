@@ -14,6 +14,7 @@ import { dispatchesRouter } from './routes/dispatches.js'
 import { respondRouter } from './routes/respond.js'
 import { geocodeRouter } from './routes/geocode.js'
 import { usersRouter } from './routes/users.js'
+import { activityRouter } from './routes/activity.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -31,6 +32,7 @@ export function buildApp({ seed = true } = {}) {
   app.use('/api/respond', respondRouter)
   app.use('/api/geocode', geocodeRouter)
   app.use('/api/users', usersRouter)
+  app.use('/api/activity', activityRouter)
 
   // In production, serve the built client (vite build output at repo-root /dist).
   const DIST = join(__dirname, '..', '..', 'dist')

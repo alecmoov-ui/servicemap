@@ -9,9 +9,9 @@ if (!process.env.JWT_SECRET) {
 }
 
 const PERMISSIONS = {
-  admin: { editStations: true, addStations: true, dispatch: true, viewAnalytics: true, manageUsers: true },
-  dtm: { editStations: true, addStations: true, dispatch: true, viewAnalytics: true, manageUsers: false },
-  dispatch: { editStations: false, addStations: false, dispatch: true, viewAnalytics: true, manageUsers: false },
+  admin: { editStations: true, addStations: true, dispatch: true, viewAnalytics: true, manageUsers: true, viewAudit: true },
+  dtm: { editStations: true, addStations: true, dispatch: true, viewAnalytics: true, manageUsers: false, viewAudit: false },
+  dispatch: { editStations: false, addStations: false, dispatch: true, viewAnalytics: true, manageUsers: false, viewAudit: false },
 }
 
 export function can(role, action) {

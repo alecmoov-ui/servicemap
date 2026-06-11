@@ -2,6 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { db } from '../db.js'
 import { signToken, requireAuth } from '../auth.js'
+import { logActivity } from '../activity.js'
 
 export const authRouter = Router()
 
@@ -13,6 +14,7 @@ authRouter.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password' })
   }
   const safe = { id: user.id, email: user.email, name: user.name, role: user.role }
+  logActivity({ actor: safe.email, actorName: safe.name, action: 'login', entityType: 'session', summary: `${safe.name} signed in` })
   res.json({ token: signToken(safe), user: safe })
 })
 

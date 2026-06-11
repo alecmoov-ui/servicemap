@@ -2,6 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { db } from '../db.js'
 import { requireAuth, requirePermission } from '../auth.js'
+import { logFromReq } from '../activity.js'
 
 export const usersRouter = Router()
 usersRouter.use(requireAuth, requirePermission('manageUsers'))
@@ -25,6 +26,7 @@ usersRouter.post('/', (req, res) => {
   const info = db
     .prepare('INSERT INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
     .run(email.toLowerCase().trim(), name, role, bcrypt.hashSync(password, 10))
+  logFromReq(req, { action: 'user.create', entityType: 'user', entityId: info.lastInsertRowid, summary: `Invited ${name} (${email}) as ${role}` })
   res.status(201).json(safe(db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)))
 })
 
@@ -46,6 +48,7 @@ usersRouter.put('/:id', (req, res) => {
     if (String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), id)
   }
+  logFromReq(req, { action: 'user.update', entityType: 'user', entityId: id, summary: `Updated ${user.email}${role && role !== user.role ? ` → ${role}` : ''}${password ? ' (password reset)' : ''}` })
   res.json(safe(db.prepare('SELECT * FROM users WHERE id = ?').get(id)))
 })
 
@@ -56,5 +59,6 @@ usersRouter.delete('/:id', (req, res) => {
   if (id === Number(req.user.sub)) return res.status(400).json({ error: 'You cannot delete your own account' })
   if (user.role === 'admin' && adminCount() <= 1) return res.status(400).json({ error: 'Cannot delete the last admin' })
   db.prepare('DELETE FROM users WHERE id = ?').run(id)
+  logFromReq(req, { action: 'user.delete', entityType: 'user', entityId: id, summary: `Removed ${user.email}` })
   res.json({ ok: true })
 })

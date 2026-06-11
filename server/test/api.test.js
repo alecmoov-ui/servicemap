@@ -118,6 +118,8 @@ test('dispatch lifecycle: create -> accept via single-use token -> counters upda
   assert.equal(created.status, 201)
   assert.ok(created.data.email.acceptUrl.includes('/respond/'))
   assert.equal(created.data.dispatch.status, 'requested')
+  // Email is sent FROM the dispatching user, not a fixed service mailbox.
+  assert.equal(created.data.email.from, 'dispatch@moovpool.com')
 
   const tokenStr = created.data.email.acceptUrl.split('/respond/')[1]
   const responded = await api('/api/respond', { method: 'POST', body: { token: tokenStr } })
@@ -154,4 +156,30 @@ test('user management: admin only; cannot delete the last admin', async () => {
   const adminId = list.data.find((u) => u.role === 'admin').id
   const delAdmin = await api(`/api/users/${adminId}`, { method: 'DELETE', token: adminToken })
   assert.equal(delAdmin.status, 400)
+})
+
+test('activity log: admin-only, and records logins + dispatches', async () => {
+  const adminToken = await tokenFor('admin@moovpool.com') // also creates a login entry
+  const dispatchToken = await tokenFor('dispatch@moovpool.com')
+
+  // Non-admins cannot view the audit log.
+  const denied = await api('/api/activity', { token: dispatchToken })
+  assert.equal(denied.status, 403)
+
+  // Create a dispatch, which should be audited.
+  await api('/api/dispatches', {
+    method: 'POST', token: dispatchToken,
+    body: { stationId: 'st_03', product: 'Filter', consumer: { address: 'Lake City, FL' } },
+  })
+
+  const log = await api('/api/activity', { token: adminToken })
+  assert.equal(log.status, 200)
+  assert.ok(log.data.some((e) => e.action === 'login'))
+  const d = log.data.find((e) => e.action === 'dispatch.create')
+  assert.ok(d, 'dispatch.create should be logged')
+  assert.equal(d.actor, 'dispatch@moovpool.com') // attributed to the dispatcher
+
+  // Filtering by action works.
+  const filtered = await api('/api/activity?action=login', { token: adminToken })
+  assert.ok(filtered.data.every((e) => e.action === 'login'))
 })

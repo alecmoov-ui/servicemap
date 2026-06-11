@@ -84,6 +84,18 @@ CREATE TABLE IF NOT EXISTS dispatch_events (
   actor       TEXT,
   at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS activity_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  at          TEXT NOT NULL DEFAULT (datetime('now')),
+  actor       TEXT,            -- email of the user (or 'station' for email-link clicks)
+  actor_name  TEXT,
+  action      TEXT NOT NULL,   -- e.g. login, dispatch.create, station.update, user.delete
+  entity_type TEXT,            -- station | dispatch | user | session
+  entity_id   TEXT,
+  summary     TEXT             -- human-readable description
+);
+CREATE INDEX IF NOT EXISTS idx_activity_at ON activity_log (at DESC);
 `)
 
 // ---- Row <-> API shape ----------------------------------------------------
@@ -147,6 +159,19 @@ export function stationToColumns(s) {
     if (s.perf.jobsCompleted !== undefined) c.jobs_completed = s.perf.jobsCompleted
   }
   return c
+}
+
+export function rowToActivity(r) {
+  return {
+    id: r.id,
+    at: r.at,
+    actor: r.actor,
+    actorName: r.actor_name,
+    action: r.action,
+    entityType: r.entity_type,
+    entityId: r.entity_id,
+    summary: r.summary,
+  }
 }
 
 export function rowToDispatch(r, events) {

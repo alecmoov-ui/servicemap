@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
 import { db, rowToStation, stationToColumns } from '../db.js'
 import { requireAuth, requirePermission } from '../auth.js'
+import { logFromReq } from '../activity.js'
 
 export const stationsRouter = Router()
 stationsRouter.use(requireAuth)
@@ -21,6 +22,7 @@ stationsRouter.post('/', requirePermission('addStations'), (req, res) => {
     `INSERT INTO stations (id, is_master${keys.length ? ', ' + keys.join(', ') : ''})
      VALUES (@id, 0${keys.length ? ', ' + keys.map((k) => '@' + k).join(', ') : ''})`
   ).run({ id, ...cols })
+  logFromReq(req, { action: 'station.create', entityType: 'station', entityId: id, summary: `Added station ${s.company}` })
   res.status(201).json(rowToStation(db.prepare('SELECT * FROM stations WHERE id = ?').get(id)))
 })
 
@@ -34,6 +36,12 @@ stationsRouter.put('/:id', requirePermission('editStations'), (req, res) => {
       `UPDATE stations SET ${keys.map((k) => `${k} = @${k}`).join(', ')}, updated_at = datetime('now') WHERE id = @id`
     ).run({ id: req.params.id, ...cols })
   }
+  logFromReq(req, {
+    action: 'station.update',
+    entityType: 'station',
+    entityId: req.params.id,
+    summary: `Edited station ${existing.company} (${keys.join(', ') || 'no changes'})`,
+  })
   res.json(rowToStation(db.prepare('SELECT * FROM stations WHERE id = ?').get(req.params.id)))
 })
 
@@ -43,5 +51,6 @@ stationsRouter.delete('/:id', requirePermission('manageUsers'), (req, res) => {
   if (!s) return res.status(404).json({ error: 'Station not found' })
   if (s.is_master) return res.status(403).json({ error: 'Master records cannot be deleted; set status to "paused" instead.' })
   db.prepare('DELETE FROM stations WHERE id = ?').run(req.params.id)
+  logFromReq(req, { action: 'station.delete', entityType: 'station', entityId: req.params.id, summary: `Deleted station ${s.company}` })
   res.json({ ok: true })
 })

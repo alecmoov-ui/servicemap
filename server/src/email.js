@@ -10,14 +10,21 @@
 import nodemailer from 'nodemailer'
 import { signResponseToken } from './tokens.js'
 
+// Fallback mailbox only — the normal sender is the dispatching user's own mailbox.
 export const SERVICE_MAILBOX = process.env.SERVICE_MAILBOX || 'Serviceuse@moovpool.com'
 
-export function buildDispatchEmail({ dispatch, station, appUrl }) {
+// `sender` is the logged-in dispatcher ({ email, name }). The email is sent FROM
+// their mailbox so replies (completion/issues) come back to them and attribution
+// is real. Falls back to SERVICE_MAILBOX only if a sender email is missing.
+export function buildDispatchEmail({ dispatch, station, appUrl, sender }) {
   const base = (appUrl || process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
   const acceptToken = signResponseToken(dispatch.id, 'accept')
   const declineToken = signResponseToken(dispatch.id, 'decline')
   const acceptUrl = `${base}/#/respond/${acceptToken}`
   const declineUrl = `${base}/#/respond/${declineToken}`
+
+  const from = sender?.email || SERVICE_MAILBOX
+  const senderName = sender?.name || 'Moov Pool Warranty Service'
 
   const c = dispatch.consumer || {}
   const subject = `[Moov Service Dispatch ${dispatch.id}] ${dispatch.product} — ${c.city || c.address || ''}`
@@ -42,10 +49,11 @@ If you accept, reply to this email thread when the job is COMPLETE, or to report
 issues encountered on site. All correspondence stays on this thread for our records.
 
 Thank you,
+${senderName}
 Moov Pool Warranty Service
-${SERVICE_MAILBOX}`
+${from}`
 
-  return { from: SERVICE_MAILBOX, to: station.email, subject, body, acceptUrl, declineUrl }
+  return { from, senderName, to: station.email, subject, body, acceptUrl, declineUrl }
 }
 
 let smtpTransport = null
@@ -61,12 +69,14 @@ function getSmtp() {
   return smtpTransport
 }
 
-// Microsoft 365 / Graph: client-credentials token, then sendMail as the mailbox.
-// Setup (one time, in Azure AD):
+// Microsoft 365 / Graph: client-credentials token, then sendMail AS the sender's
+// mailbox (email.from = the dispatching user). The Mail.Send *application*
+// permission lets the app send as any user in the tenant, so each dispatcher's
+// own email is the sender. Setup (one time, in Azure AD):
 //   1. App registrations -> New registration.
 //   2. API permissions -> Microsoft Graph -> Application -> Mail.Send -> Grant admin consent.
 //   3. Certificates & secrets -> new client secret.
-//   4. Set GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, SERVICE_MAILBOX.
+//   4. Set GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET.
 async function getGraphToken() {
   const tenant = process.env.GRAPH_TENANT_ID
   const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
@@ -94,7 +104,7 @@ export async function sendEmail(email) {
   if (transport === 'graph') {
     const token = await getGraphToken()
     const res = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(SERVICE_MAILBOX)}/sendMail`,
+      `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(email.from)}/sendMail`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
