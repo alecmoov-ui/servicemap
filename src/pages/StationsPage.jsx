@@ -1,14 +1,11 @@
 import { useState } from 'react'
-import { useStations, useDispatches, useRole } from '../lib/useStore.js'
-import { updateStation, addStation, advanceDispatch, isMasterRecord } from '../lib/store.js'
+import { useApp } from '../lib/AppContext.jsx'
+import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore } from '../lib/ratings.js'
-import { geocodeAddress } from '../lib/geo.js'
 
 export default function StationsPage() {
-  const stations = useStations()
-  const dispatches = useDispatches()
-  const role = useRole()
+  const { stations, dispatches, role, advanceDispatch } = useApp()
   const [editing, setEditing] = useState(null) // station or 'new'
 
   return (
@@ -75,7 +72,7 @@ export default function StationsPage() {
                 <tr key={s.id}>
                   <td>
                     <b>{s.company}</b>
-                    {isMasterRecord(s.id) ? <span className="tag master-tag">master</span> : <span className="tag added-tag">added</span>}
+                    {s.isMaster ? <span className="tag master-tag">master</span> : <span className="tag added-tag">added</span>}
                   </td>
                   <td>{s.city}, {s.state}</td>
                   <td>{s.serviceRadiusMi} mi</td>
@@ -122,6 +119,7 @@ function StationForm({ station, onClose }) {
       products: { pumps: false, saltSystems: false, roboticCleaners: false, heatPumps: false, lights: false, filters: false },
     }
   )
+  const { createStation, updateStation } = useApp()
   const [saving, setSaving] = useState(false)
   const [geoError, setGeoError] = useState(null)
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }))
@@ -142,7 +140,7 @@ function StationForm({ station, onClose }) {
       }
       try {
         setSaving(true)
-        const geo = await geocodeAddress(query)
+        const geo = await api.geocode(query)
         lat = geo.lat
         lng = geo.lng
         precision = 'address'
@@ -151,26 +149,34 @@ function StationForm({ station, onClose }) {
         setGeoError(`Could not geocode "${query}": ${err.message}. Enter lat/lng manually.`)
         return
       }
-      setSaving(false)
     }
 
+    // Build a clean payload of editable fields only (never touch perf/isMaster/id).
+    const { id, isMaster, perf, ...editable } = f
     const payload = {
-      ...f,
+      ...editable,
       lat,
       lng,
       geocodePrecision: precision,
       serviceRadiusMi: parseInt(f.serviceRadiusMi, 10) || 25,
     }
-    if (isNew) addStation(payload)
-    else updateStation(station.id, payload)
-    onClose()
+    try {
+      setSaving(true)
+      if (isNew) await createStation(payload)
+      else await updateStation(station.id, payload)
+      onClose()
+    } catch (err) {
+      setGeoError(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>{isNew ? 'Add service station' : 'Edit ' + station.company}</h3>
-        {!isNew && isMasterRecord(station.id) && (
+        {!isNew && station.isMaster && (
           <p className="muted">Edits are stored as an overlay — the original master record is preserved and restorable via Reset.</p>
         )}
         <div className="form-grid">

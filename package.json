@@ -8,7 +8,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "geocode": "node scripts/geocode-stations.mjs"
+    "geocode": "node scripts/geocode-stations.mjs",
+    "setup": "npm install && npm --prefix server install",
+    "server": "npm --prefix server start",
+    "server:dev": "npm --prefix server run dev",
+    "dev:all": "concurrently -n client,server -c blue,green \"npm run dev\" \"npm run server:dev\"",
+    "start": "npm run build && npm --prefix server start"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -20,6 +25,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^10.0.3",
     "vite": "^5.4.8",
     "vite-plugin-singlefile": "^2.3.3"
   }

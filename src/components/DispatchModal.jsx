@@ -1,30 +1,31 @@
 import { useState } from 'react'
-import { buildDispatchEmail, sendDispatchEmail, SERVICE_MAILBOX } from '../lib/email.js'
-import { createDispatch } from '../lib/store.js'
+import { useApp } from '../lib/AppContext.jsx'
 
 export default function DispatchModal({ station, consumer, product, distanceMi, onClose }) {
+  const { createDispatch } = useApp()
   const [issue, setIssue] = useState('')
   const [consumerName, setConsumerName] = useState('')
-  const [sent, setSent] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [sent, setSent] = useState(null) // { dispatch, email, delivery }
 
-  function send() {
-    const dispatch = createDispatch({
-      stationId: station.id,
-      stationCompany: station.company,
-      stationState: station.state,
-      product,
-      distanceMi,
-      issue,
-      consumer: { name: consumerName, address: consumer.address, city: consumer.label },
-    })
-    const email = buildDispatchEmail({
-      dispatch,
-      station,
-      consumer: { name: consumerName, address: consumer.address, city: consumer.label },
-      product,
-    })
-    sendDispatchEmail(email)
-    setSent({ dispatch, email })
+  async function send() {
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await createDispatch({
+        stationId: station.id,
+        product,
+        distanceMi,
+        issue,
+        consumer: { name: consumerName, address: consumer.address, city: consumer.label },
+      })
+      setSent(result)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -34,8 +35,8 @@ export default function DispatchModal({ station, consumer, product, distanceMi, 
           <>
             <h3>Dispatch request → {station.company}</h3>
             <p className="muted">
-              {product} · {distanceMi != null ? distanceMi.toFixed(1) + ' mi away' : ''} · sent from{' '}
-              <code>{SERVICE_MAILBOX}</code> to <code>{station.email}</code>
+              {product} · {distanceMi != null ? distanceMi.toFixed(1) + ' mi away' : ''} · sent to{' '}
+              <code>{station.email}</code>
             </p>
             <label className="field">
               <span>End-user name (optional)</span>
@@ -49,17 +50,20 @@ export default function DispatchModal({ station, consumer, product, distanceMi, 
               <span>Issue / RMA detail</span>
               <textarea rows={3} value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="e.g. Heat pump throwing E05, no heat. RMA #1234." />
             </label>
+            {error && <div className="error">{error}</div>}
             <div className="modal-actions">
-              <button className="ghost" onClick={onClose}>Cancel</button>
-              <button className="primary" onClick={send}>Send dispatch request</button>
+              <button className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
+              <button className="primary" onClick={send} disabled={busy}>{busy ? 'Sending…' : 'Send dispatch request'}</button>
             </div>
           </>
         ) : (
           <>
             <h3>✅ Dispatch {sent.dispatch.id} logged</h3>
             <p className="muted">
-              Logged at {new Date(sent.dispatch.createdAt).toLocaleString()}. In log-mode the email is
-              previewed below (and in the console). Wire a real transport to send it from {SERVICE_MAILBOX}.
+              Logged at {new Date(sent.dispatch.createdAt).toLocaleString()}.{' '}
+              {sent.delivery?.sent
+                ? `Email sent via ${sent.delivery.mode}.`
+                : 'Running in log-mode — the composed email is shown below (set EMAIL_TRANSPORT to send it for real).'}
             </p>
             <div className="email-preview">
               <div><b>From:</b> {sent.email.from}</div>
@@ -67,9 +71,7 @@ export default function DispatchModal({ station, consumer, product, distanceMi, 
               <div><b>Subject:</b> {sent.email.subject}</div>
               <pre>{sent.email.body}</pre>
             </div>
-            <p className="muted">
-              Simulate the station&apos;s response (in production they click the link in the email):
-            </p>
+            <p className="muted">Simulate the station&apos;s response (in production they click the link in the email):</p>
             <div className="modal-actions">
               <a className="ghost" href={sent.email.declineUrl}>Open decline link</a>
               <a className="primary" href={sent.email.acceptUrl}>Open accept link</a>

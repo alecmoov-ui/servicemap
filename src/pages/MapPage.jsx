@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import MapView from '../components/MapView.jsx'
 import DispatchModal from '../components/DispatchModal.jsx'
 import { useStations, useRole } from '../lib/useStore.js'
-import { geocodeAddress, haversineMiles } from '../lib/geo.js'
+import { api } from '../lib/api.js'
+import { haversineMiles } from '../lib/geo.js'
 import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { can } from '../lib/roles.js'
 
@@ -46,7 +47,7 @@ export default function MapPage() {
     setSearching(true)
     setError(null)
     try {
-      const geo = await geocodeAddress(address)
+      const geo = await api.geocode(address)
       setConsumer({ ...geo, address })
       setSelectedId(null)
     } catch (err) {

@@ -4,3 +4,8 @@ dist
 *.local
 .env
 .env.*
+
+# SQLite database (created at runtime by the server)
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
