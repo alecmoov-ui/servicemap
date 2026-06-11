@@ -3,6 +3,7 @@ import { useStations, useDispatches, useRole } from '../lib/useStore.js'
 import { updateStation, addStation, advanceDispatch, isMasterRecord } from '../lib/store.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore } from '../lib/ratings.js'
+import { geocodeAddress } from '../lib/geo.js'
 
 export default function StationsPage() {
   const stations = useStations()
@@ -121,13 +122,43 @@ function StationForm({ station, onClose }) {
       products: { pumps: false, saltSystems: false, roboticCleaners: false, heatPumps: false, lights: false, filters: false },
     }
   )
+  const [saving, setSaving] = useState(false)
+  const [geoError, setGeoError] = useState(null)
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }))
   const setProd = (k, v) => setF((p) => ({ ...p, products: { ...p.products, [k]: v } }))
 
-  function save() {
+  async function save() {
+    setGeoError(null)
+    let lat = parseFloat(f.lat)
+    let lng = parseFloat(f.lng)
+    let precision = f.geocodePrecision || 'address'
+
+    // If coordinates are blank, geocode the service address to drop a pinpoint pin.
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      const query = f.serviceAddress || `${f.city}, ${f.state}`
+      if (!query.trim()) {
+        setGeoError('Enter a service address (or lat/lng) so we can place the pin.')
+        return
+      }
+      try {
+        setSaving(true)
+        const geo = await geocodeAddress(query)
+        lat = geo.lat
+        lng = geo.lng
+        precision = 'address'
+      } catch (err) {
+        setSaving(false)
+        setGeoError(`Could not geocode "${query}": ${err.message}. Enter lat/lng manually.`)
+        return
+      }
+      setSaving(false)
+    }
+
     const payload = {
       ...f,
-      lat: parseFloat(f.lat), lng: parseFloat(f.lng),
+      lat,
+      lng,
+      geocodePrecision: precision,
       serviceRadiusMi: parseInt(f.serviceRadiusMi, 10) || 25,
     }
     if (isNew) addStation(payload)
@@ -147,8 +178,8 @@ function StationForm({ station, onClose }) {
           <Field label="Service address"><input value={f.serviceAddress} onChange={(e) => set('serviceAddress', e.target.value)} /></Field>
           <Field label="City"><input value={f.city} onChange={(e) => set('city', e.target.value)} /></Field>
           <Field label="State"><input value={f.state} onChange={(e) => set('state', e.target.value)} maxLength={2} /></Field>
-          <Field label="Latitude"><input value={f.lat} onChange={(e) => set('lat', e.target.value)} placeholder="e.g. 28.5383" /></Field>
-          <Field label="Longitude"><input value={f.lng} onChange={(e) => set('lng', e.target.value)} placeholder="e.g. -81.3792" /></Field>
+          <Field label="Latitude (blank = auto-geocode)"><input value={f.lat} onChange={(e) => set('lat', e.target.value)} placeholder="auto from address" /></Field>
+          <Field label="Longitude (blank = auto-geocode)"><input value={f.lng} onChange={(e) => set('lng', e.target.value)} placeholder="auto from address" /></Field>
           <Field label="Service radius (mi)"><input type="number" value={f.serviceRadiusMi} onChange={(e) => set('serviceRadiusMi', e.target.value)} /></Field>
           <Field label="Service type">
             <select value={f.serviceType} onChange={(e) => set('serviceType', e.target.value)}>
@@ -183,9 +214,12 @@ function StationForm({ station, onClose }) {
 
         <Field label="Notes"><textarea rows={2} value={f.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
 
+        {geoError && <div className="error">{geoError}</div>}
         <div className="modal-actions">
-          <button className="ghost" onClick={onClose}>Cancel</button>
-          <button className="primary" onClick={save}>{isNew ? 'Add station' : 'Save changes'}</button>
+          <button className="ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="primary" onClick={save} disabled={saving}>
+            {saving ? 'Geocoding…' : isNew ? 'Add station' : 'Save changes'}
+          </button>
         </div>
       </div>
     </div>

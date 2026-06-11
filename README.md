@@ -14,14 +14,47 @@ authorized service stations, match them to an end-user's location by **product t
 
 ## Quick start
 
-```bash
-npm install
-npm run dev        # open http://localhost:5173
-```
+This is a website that runs on **your own computer** — it is not hosted anywhere yet.
+A `localhost` link only works on the machine that is actually running the dev server,
+so you have to install it locally first (this is why a bare `localhost:5173` link
+"refused to connect").
 
-The map tiles and the address search (geocoding) call free public services
-(OpenStreetMap / Nominatim) and need normal internet access — they work from your
-machine. No API keys required for the prototype.
+### What you need to install (one time)
+1. **Node.js LTS (v18 or newer)** — includes `npm`. Download: <https://nodejs.org>
+   (this was built/tested on Node 22). Verify with `node -v`.
+2. **Git** — to download the code. Download: <https://git-scm.com>
+   *(Alternative: on GitHub, use the green **Code → Download ZIP** button on the
+   `claude/loving-carson-kx6f00` branch and unzip it — then skip the `git clone` step.)*
+
+That's the entire toolchain. Everything else (React, Leaflet, Vite, Recharts) is
+pulled in automatically by `npm install` and is version-pinned in `package.json`.
+**No API keys or accounts are required** for the prototype.
+
+### Run it
+```bash
+git clone <your-repo-url>
+cd servicemap
+git checkout claude/loving-carson-kx6f00
+
+npm install        # downloads dependencies (one time, ~1 min)
+npm run geocode    # optional: refine the 37 pins to exact street addresses (one time)
+npm run dev        # starts the app
+```
+`npm run dev` prints a URL like `http://localhost:5173/` — open **that** in your
+browser. (Stop the server with `Ctrl+C`.) The map tiles and address search call free
+OpenStreetMap services and just need normal internet.
+
+### Pinpoint address pins
+The seed ships with **city-center** coordinates so pins show up immediately without
+any setup. To upgrade them to **exact street-level pins**, run once:
+```bash
+npm run geocode
+```
+This geocodes all 37 service addresses (OpenStreetMap, no key; ~45s due to the
+1 req/sec rate limit) and rewrites `src/data/stations.seed.json` with precise
+coordinates. It's safe to re-run. Separately, when you **add a station** in the app
+and leave lat/lng blank, it auto-geocodes the address you typed and drops a pinpoint
+pin on save.
 
 ---
 
@@ -141,6 +174,7 @@ backend so data is shared, protected, and auditable:
 
 ## Project structure
 ```
+scripts/geocode-stations.mjs # one-time: refine seed pins to street level
 src/
   data/stations.seed.json   # the 37 stations (protected master list)
   lib/
