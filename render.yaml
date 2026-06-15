@@ -19,12 +19,13 @@ services:
         generateValue: true
       - key: SEED_PASSWORD    # initial demo-account password; set your own
         sync: false
-      - key: APP_URL          # set to the live URL after first deploy
-        sync: false
-      - key: EMAIL_TRANSPORT
-        value: log
-      - key: DB_PATH          # store the SQLite file on the persistent disk
+      # Keep the database, uploaded documents, and backups on the persistent disk.
+      - key: DB_PATH
         value: /var/data/servicemap.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: BACKUP_DIR
+        value: /var/data/backups
     disk:
       name: data
       mountPath: /var/data

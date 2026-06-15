@@ -1,15 +1,20 @@
 # Moov Service Network
 
-A full-stack web app for managing Moov Pool's US warranty service network: map your
-authorized service stations, match them to an end-user's location by **product type +
-service radius**, send and track **dispatch requests**, spot **coverage gaps**, and
+A full-stack web app for managing Moov Pool's US warranty service network: find the
+**authorized centers** that can cover a client's address by **product type + service
+radius**, spot **coverage gaps**, store each station's **agreement documents**, and
 analyze network **performance** — with real accounts, roles, and a shared database.
 Seeded from the 37 stations in your spreadsheet.
 
-- **Frontend:** React + Vite + Leaflet (the map, dispatch, coverage, analytics screens).
+> **Dispatching and dispatch emails are handled in Zendesk**, where the full ticket
+> lifecycle (support → service → dispatch → resolved) is tracked. This tool is for
+> *finding* centers and *recording* their performance — the team copies key fields from
+> a resolved Zendesk ticket into the per-station **Service Log**, and all analytics
+> derive from that.
+
+- **Frontend:** React + Vite + Leaflet (search/map, coverage, analytics, stations screens).
 - **Backend:** Node + Express + SQLite — JWT auth, server-enforced roles, a protected
-  master station list, dispatch records with signed accept/decline tokens, and a
-  pluggable dispatch-email transport.
+  master station list, document storage, a manual service log, CSV export, and backups.
 
 ---
 
@@ -61,12 +66,11 @@ Adding a station in the app and leaving lat/lng blank also auto-geocodes the add
 
 ## Features
 
-### Map & Dispatch
-Pick an equipment type, enter the end-user's address (geocoded via the backend), and get
+### Map & Search (find authorized centers)
+Pick an equipment type, enter the client's address (geocoded via the backend), and get
 **only** stations that service that product **and** cover the location within their
 declared radius — ranked by reliability with a star rating. The map draws service-radius
-zone circles; "Send dispatch request" creates a logged dispatch and composes the email
-from `Serviceuse@moovpool.com` with **signed Accept/Decline links**.
+zone circles and shows each center's contact details to route the dispatch in Zendesk.
 
 ### Zone Coverage
 A second map showing **coverage density** (overlapping radii shade darker) and **gap
@@ -75,43 +79,37 @@ population, with a ranked recruiting-target list. Filterable by product.
 
 ### Analytics
 Network KPIs, the requested→accepted→completed funnel, stations-by-state, product
-coverage, average time-to-resolution, and a reliability leaderboard.
+coverage, average completion duration, and a reliability leaderboard — all derived from
+the Service Log.
 
 ### Stations
-A **dispatch board** (live status timelines) and the **master station list**. Editing is
-**role-gated and enforced on the server**: Dispatch is read-only; DTM/Admin can edit and
-add. Master (seed) records can be edited but never deleted — the API rejects it — so the
-master map can't be destroyed.
+The **master station list** with the full Schedule A profile (identity, location +
+radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:
+- **Log** a service event (the manual analytics entry — see below).
+- **Edit** the profile and **upload documents**: Service Contract, Schedule A, HVAC
+  License, Proof of Insurance.
+- **Export CSV** of all stations (data backup / Excel) and create **database snapshots**.
+
+Editing is **role-gated and enforced on the server**: Dispatch is read-only on the list
+(but can log events); DTM/Admin edit and add. Master (seed) records can be edited but
+never deleted — the API rejects it — so the master map can't be destroyed. Adding a
+station immediately appears in Map, Zone Coverage, and Analytics.
+
+### Service Log (manual analytics entry)
+Because dispatching happens in Zendesk, the team records outcomes here: one quick entry
+per resolved ticket (date, product, accepted?, completed?, days-to-complete, ticket #).
+Station performance and **all analytics are derived automatically** from these entries —
+no running totals to maintain by hand.
 
 ### Users (Admin only)
-An admin screen to invite/manage team members and set their role (Admin / DTM /
-Dispatch). Guardrails prevent deleting your own account or removing the last admin.
+Invite/manage team members and set their role. Guardrails prevent deleting your own
+account or removing the last admin.
 
 ### Roles & reliability
 Permissions live in `server/src/auth.js` (enforced) and `src/lib/roles.js` (UI gating).
 The 0–100 reliability score (`src/lib/ratings.js`) blends acceptance, completion, and
 volume; new stations get a neutral baseline so they still surface. Seed performance
-numbers are demo values; real numbers accrue as you dispatch.
-
----
-
-## How dispatch + the accept/decline loop works
-1. A dispatcher sends a request → a `dispatches` row is created, the station's request
-   counter increments, and the email is composed with two **signed, single-use tokens**.
-2. The station clicks **Accept** or **Decline** in the email → lands on the public
-   `/#/respond/<token>` page → the backend verifies the token and records the response
-   **once** (re-clicks are no-ops). Counters update automatically.
-3. On completion, the station replies to the email thread; a dispatcher marks the job
-   **Completed** (or **Issue**) on the board. (Auto-ingesting thread replies is the next
-   step — see below.)
-
-### Sending real email
-Default is **log-mode** (the composed email is shown in the UI and server log; nothing is
-sent). Configure a transport via `server/.env` (see `server/.env.example`):
-- `EMAIL_TRANSPORT=smtp` with the `SMTP_*` vars — sends immediately via SMTP.
-- `EMAIL_TRANSPORT=graph` — Microsoft Graph `sendMail` as `Serviceuse@moovpool.com`
-  (Microsoft 365). Register an Azure AD app, grant `Mail.Send`, then implement the marked
-  section in `server/src/email.js`. The token links already work as-is.
+numbers are demo values; real numbers accrue as the team logs events.
 
 ---
 
@@ -119,23 +117,21 @@ sent). Configure a transport via `server/.env` (see `server/.env.example`):
 ```
 src/                         # React client
   lib/
-    api.js                   # API client (JWT, error handling)
-    AppContext.jsx           # auth + data provider (replaces localStorage)
+    api.js                   # API client (JWT, downloads, error handling)
+    AppContext.jsx           # auth + data provider
     geo.js / ratings.js / roles.js
-  pages/  Map, Coverage, Analytics, Stations, Users, Login, Respond
-  components/  MapView, DispatchModal
+  pages/  Map, Coverage, Analytics, Stations, Users, Activity, Login
+  components/  MapView
   data/  stations.seed.json (the 37 stations), metros.js
 server/                      # Express + SQLite API
   src/
     index.js                 # entry: starts the server
     app.js                   # buildApp() — used by index.js and the tests
-    db.js                    # schema + row<->API mapping
-    seed.js                  # seeds 37 stations + demo users
+    db.js                    # schema + row<->API mapping + perf aggregation
+    seed.js                  # seeds 37 stations + users + demo service log
     auth.js                  # JWT + role enforcement
-    tokens.js                # signed accept/decline tokens
-    email.js                 # pluggable transport (log/smtp/graph)
-    dispatchService.js       # status transitions + counter updates
-    routes/  auth, stations, dispatches, respond, geocode, users
+    activity.js              # audit log helpers
+    routes/  auth, stations (incl. service-log/documents/export), geocode, users, activity, admin
   test/api.test.js           # backend integration tests
   scripts/backup.js          # online SQLite backup + retention
   .env.example
@@ -154,9 +150,8 @@ resets across restarts/redeploys.
 
 ### Option 1 — Render (blueprint included)
 `render.yaml` defines a web service **with a 1 GB persistent disk** mounted at `/var/data`
-(the DB lives there via `DB_PATH`). In Render: **New + → Blueprint → connect this repo.**
-After the first deploy, set `APP_URL` to the live URL (used in dispatch-email links).
-`JWT_SECRET` is auto-generated and kept stable.
+(the DB, uploaded documents, and backups all live there). In Render: **New + → Blueprint
+→ connect this repo.** `JWT_SECRET` is auto-generated and kept stable.
 
 ### Option 2 — Docker (Render/Azure/Fly/VM — anywhere)
 ```bash
@@ -173,28 +168,34 @@ Optional. The host gives you a working HTTPS URL out of the box (SSL auto-issued
 the host dashboard and create the one DNS record it shows you; SSL re-issues automatically.
 
 ### Required production env vars
-`JWT_SECRET` (strong, stable), `APP_URL` (live URL), `DB_PATH` (on the persistent disk),
-`SEED_PASSWORD` (initial admin password). For real email, `EMAIL_TRANSPORT=graph` +
-`GRAPH_TENANT_ID`/`GRAPH_CLIENT_ID`/`GRAPH_CLIENT_SECRET`. See `server/.env.example`.
+`JWT_SECRET` (strong, stable), `DB_PATH`, `UPLOAD_DIR`, and `BACKUP_DIR` (all on the
+persistent disk), and `SEED_PASSWORD` (initial admin password). See `server/.env.example`.
 
 ## Reliability & maintenance (the safety net)
 
 - **Tests** — `npm --prefix server test` covers auth, role enforcement, master-record
-  protection, the dispatch/accept lifecycle, and user management. Run before any change.
+  protection, the service log + derived performance, CSV export, and user management. Run
+  before any change.
 - **CI** — `.github/workflows/ci.yml` runs tests + build on every push/PR, so a breaking
   change fails *before* it ships.
 - **Rollback** — every change is a Git commit; tag releases (`git tag v1.0`) to return to
   a known-good version instantly. Hosts also keep deploy history for one-click rollback.
-- **Database backups** — code rollback does NOT restore data. Back up the SQLite file:
-  `npm --prefix server run backup` (timestamped copy in `server/data/backups`, keeps the
-  last 14). Schedule it (cron / host scheduler) daily in production.
+- **Data protection (3 layers):**
+  1. **CSV export** (Stations → Export CSV) — a portable backup of every station you can
+     open in Excel and keep alongside your own master sheet.
+  2. **Database snapshots** (Stations → Backups, admin) — full save-points you can create
+     on demand and download. Also run `npm --prefix server run backup` on a weekly cron
+     for automatic save-points (keeps the last 14).
+  3. **Restore** is an ops step: stop the server, replace `server/data/servicemap.db`
+     with the chosen snapshot, restart. (Uploaded documents live under `UPLOAD_DIR` and
+     should be on the same persistent disk / backed up together.)
 - **`CLAUDE.md`** — conventions and "don't break these" rules for future changes.
 
 ## What's next (roadmap)
-1. **Turn on real email** — set `EMAIL_TRANSPORT=graph` + the Azure app credentials.
-2. **Email-thread ingestion** — a Graph subscription parses replies to auto-advance jobs
-   to *Completed*/*Issue* and attach the conversation to the record.
-3. **Demand-weighted gaps** — replace the metro list with your units-sold / RMA volume by
+1. **Demand-weighted gaps** — replace the metro list with your units-sold / RMA volume by
    region so coverage gaps reflect where failures will actually happen.
-4. **Dealer first-right-of-refusal routing** and **cost/invoice reconciliation**.
-5. **Postgres + migrations** — swap `server/src/db.js` when you outgrow SQLite.
+2. **Zendesk integration** — optionally pull resolved-ticket data via the Zendesk API to
+   auto-populate the Service Log instead of manual entry.
+3. **Document expiry reminders** — surface insurance/contract expiry dates that are
+   approaching.
+4. **Postgres + migrations** — swap `server/src/db.js` when you outgrow SQLite.

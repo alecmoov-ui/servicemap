@@ -10,16 +10,15 @@ import { existsSync } from 'node:fs'
 import { seedDatabase } from './seed.js'
 import { authRouter } from './routes/auth.js'
 import { stationsRouter } from './routes/stations.js'
-import { dispatchesRouter } from './routes/dispatches.js'
-import { respondRouter } from './routes/respond.js'
 import { geocodeRouter } from './routes/geocode.js'
 import { usersRouter } from './routes/users.js'
 import { activityRouter } from './routes/activity.js'
+import { adminRouter } from './routes/admin.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export function buildApp({ seed = true } = {}) {
-  if (seed) seedDatabase() // seeds 37 stations + demo users on first run
+  if (seed) seedDatabase() // seeds 37 stations + demo users + demo service log on first run
 
   const app = express()
   app.use(cors())
@@ -28,11 +27,10 @@ export function buildApp({ seed = true } = {}) {
   app.get('/api/health', (req, res) => res.json({ ok: true }))
   app.use('/api/auth', authRouter)
   app.use('/api/stations', stationsRouter)
-  app.use('/api/dispatches', dispatchesRouter)
-  app.use('/api/respond', respondRouter)
   app.use('/api/geocode', geocodeRouter)
   app.use('/api/users', usersRouter)
   app.use('/api/activity', activityRouter)
+  app.use('/api/admin', adminRouter)
 
   // In production, serve the built client (vite build output at repo-root /dist).
   const DIST = join(__dirname, '..', '..', 'dist')

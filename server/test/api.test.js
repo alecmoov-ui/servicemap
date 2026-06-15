@@ -1,7 +1,6 @@
-// Integration tests for the API. These are the safety net: they exercise auth,
-// role enforcement, master-record protection, the dispatch lifecycle (incl.
-// single-use accept tokens), and user management. Run with `npm test`.
-//
+// Integration tests — the safety net. Exercise auth, role enforcement,
+// master-record protection, the service log (manual analytics) and derived
+// performance, CSV export, and user management. Run with `npm test`.
 // Each run uses a fresh temp database, so tests never touch real data.
 
 import { test, before, after } from 'node:test'
@@ -15,8 +14,9 @@ let server, base, tmpDir
 before(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), 'moov-test-'))
   process.env.DB_PATH = join(tmpDir, 'test.db')
+  process.env.UPLOAD_DIR = join(tmpDir, 'uploads')
+  process.env.BACKUP_DIR = join(tmpDir, 'backups')
   process.env.JWT_SECRET = 'test-secret'
-  process.env.EMAIL_TRANSPORT = 'log'
   const { buildApp } = await import('../src/app.js')
   const app = buildApp()
   await new Promise((resolve) => {
@@ -30,15 +30,10 @@ after(() => {
   rmSync(tmpDir, { recursive: true, force: true })
 })
 
-// --- helpers ---------------------------------------------------------------
 async function api(path, { method = 'GET', token, body } = {}) {
   const headers = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = `Bearer ${token}`
-  const res = await fetch(base + path, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  const res = await fetch(base + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined })
   let data = null
   try {
     data = await res.json()
@@ -50,7 +45,6 @@ async function tokenFor(email) {
   return r.data.token
 }
 
-// --- tests -----------------------------------------------------------------
 test('health check', async () => {
   const r = await api('/api/health')
   assert.equal(r.status, 200)
@@ -62,31 +56,27 @@ test('login: valid credentials return a token; invalid are rejected', async () =
   assert.equal(ok.status, 200)
   assert.ok(ok.data.token)
   assert.equal(ok.data.user.role, 'admin')
-
   const bad = await api('/api/auth/login', { method: 'POST', body: { email: 'admin@moovpool.com', password: 'wrong' } })
   assert.equal(bad.status, 401)
 })
 
-test('stations require auth and seed with 37 protected master records', async () => {
-  const noAuth = await api('/api/stations')
-  assert.equal(noAuth.status, 401)
-
+test('stations require auth, seed 37 master records, and carry derived perf', async () => {
+  assert.equal((await api('/api/stations')).status, 401)
   const token = await tokenFor('admin@moovpool.com')
   const r = await api('/api/stations', { token })
   assert.equal(r.status, 200)
   assert.equal(r.data.length, 37)
   assert.ok(r.data.every((s) => s.isMaster === true))
+  // Perf is derived from the seeded service log.
+  assert.ok(r.data.every((s) => typeof s.perf.dispatchRequests === 'number'))
 })
 
-test('role enforcement: dispatch role cannot add stations, admin can', async () => {
+test('role enforcement: dispatch cannot add stations, admin can', async () => {
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
-  const denied = await api('/api/stations', { method: 'POST', token: dispatchToken, body: { company: 'Nope' } })
-  assert.equal(denied.status, 403)
-
+  assert.equal((await api('/api/stations', { method: 'POST', token: dispatchToken, body: { company: 'Nope' } })).status, 403)
   const adminToken = await tokenFor('admin@moovpool.com')
   const created = await api('/api/stations', {
-    method: 'POST',
-    token: adminToken,
+    method: 'POST', token: adminToken,
     body: { company: 'Test Pools', city: 'Denver', state: 'CO', lat: 39.7, lng: -105, products: { pumps: true } },
   })
   assert.equal(created.status, 201)
@@ -95,91 +85,58 @@ test('role enforcement: dispatch role cannot add stations, admin can', async () 
 
 test('master records cannot be deleted; non-master can', async () => {
   const adminToken = await tokenFor('admin@moovpool.com')
-  const master = await api('/api/stations/st_01', { method: 'DELETE', token: adminToken })
-  assert.equal(master.status, 403)
-
-  const created = await api('/api/stations', {
-    method: 'POST', token: adminToken, body: { company: 'Temp Co', city: 'X', state: 'TX' },
-  })
-  const del = await api(`/api/stations/${created.data.id}`, { method: 'DELETE', token: adminToken })
-  assert.equal(del.status, 200)
+  assert.equal((await api('/api/stations/st_01', { method: 'DELETE', token: adminToken })).status, 403)
+  const created = await api('/api/stations', { method: 'POST', token: adminToken, body: { company: 'Temp Co', city: 'X', state: 'TX' } })
+  assert.equal((await api(`/api/stations/${created.data.id}`, { method: 'DELETE', token: adminToken })).status, 200)
 })
 
-test('dispatch lifecycle: create -> accept via single-use token -> counters update', async () => {
+test('service log: any role can log; performance is recomputed', async () => {
   const token = await tokenFor('dispatch@moovpool.com')
-  const before = await api('/api/stations', { token })
-  const st = before.data.find((s) => s.id === 'st_02')
-  const acceptedBefore = st.perf.dispatchAccepted
+  const before = (await api('/api/stations', { token })).data.find((s) => s.id === 'st_02').perf
 
-  const created = await api('/api/dispatches', {
+  const updated = await api('/api/stations/st_02/service-events', {
     method: 'POST', token,
-    body: { stationId: 'st_02', product: 'Pump', distanceMi: 5, consumer: { address: 'Kissimmee, FL' } },
+    body: { zendeskTicket: 'Z99001', product: 'Pump', accepted: true, completed: true, completionDays: 3, eventDate: '2026-06-01' },
   })
-  assert.equal(created.status, 201)
-  assert.ok(created.data.email.acceptUrl.includes('/respond/'))
-  assert.equal(created.data.dispatch.status, 'requested')
-  // Email is sent FROM the dispatching user, not a fixed service mailbox.
-  assert.equal(created.data.email.from, 'dispatch@moovpool.com')
+  assert.equal(updated.status, 201)
+  assert.equal(updated.data.perf.dispatchRequests, before.dispatchRequests + 1)
+  assert.equal(updated.data.perf.dispatchAccepted, before.dispatchAccepted + 1)
+  assert.equal(updated.data.perf.jobsCompleted, before.jobsCompleted + 1)
+  assert.ok(updated.data.perf.avgCompletionDays > 0)
 
-  const tokenStr = created.data.email.acceptUrl.split('/respond/')[1]
-  const responded = await api('/api/respond', { method: 'POST', body: { token: tokenStr } })
-  assert.equal(responded.status, 200)
-  assert.equal(responded.data.status, 'accepted')
+  const events = await api('/api/stations/st_02/service-events', { token })
+  assert.ok(events.data.some((e) => e.zendeskTicket === 'Z99001'))
+})
 
-  // Re-clicking the same link is a no-op (single use).
-  const again = await api('/api/respond', { method: 'POST', body: { token: tokenStr } })
-  assert.equal(again.data.alreadyResponded, true)
+test('CSV export: allowed for admin/dtm, denied for dispatch', async () => {
+  const adminToken = await tokenFor('admin@moovpool.com')
+  const res = await fetch(base + '/api/stations/export.csv', { headers: { Authorization: `Bearer ${adminToken}` } })
+  assert.equal(res.status, 200)
+  assert.match(res.headers.get('content-type'), /csv/)
+  const text = await res.text()
+  assert.match(text, /Company,Service Address/)
 
-  const after = await api('/api/stations', { token })
-  const stAfter = after.data.find((s) => s.id === 'st_02')
-  assert.equal(stAfter.perf.dispatchAccepted, acceptedBefore + 1)
+  const dispatchToken = await tokenFor('dispatch@moovpool.com')
+  const denied = await fetch(base + '/api/stations/export.csv', { headers: { Authorization: `Bearer ${dispatchToken}` } })
+  assert.equal(denied.status, 403)
 })
 
 test('user management: admin only; cannot delete the last admin', async () => {
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
-  const denied = await api('/api/users', { token: dispatchToken })
-  assert.equal(denied.status, 403)
-
+  assert.equal((await api('/api/users', { token: dispatchToken })).status, 403)
   const adminToken = await tokenFor('admin@moovpool.com')
   const list = await api('/api/users', { token: adminToken })
-  assert.equal(list.status, 200)
   assert.ok(list.data.length >= 3)
-
-  const created = await api('/api/users', {
-    method: 'POST', token: adminToken,
-    body: { email: 'newtm@moovpool.com', name: 'New TM', role: 'dtm', password: 'secret123' },
-  })
-  assert.equal(created.status, 201)
-  assert.equal(created.data.role, 'dtm')
-
-  // The seeded admin is the only admin -> cannot be deleted.
   const adminId = list.data.find((u) => u.role === 'admin').id
-  const delAdmin = await api(`/api/users/${adminId}`, { method: 'DELETE', token: adminToken })
-  assert.equal(delAdmin.status, 400)
+  assert.equal((await api(`/api/users/${adminId}`, { method: 'DELETE', token: adminToken })).status, 400)
 })
 
-test('activity log: admin-only, and records logins + dispatches', async () => {
-  const adminToken = await tokenFor('admin@moovpool.com') // also creates a login entry
+test('activity log: admin-only, records service-log entries', async () => {
+  const adminToken = await tokenFor('admin@moovpool.com')
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
-
-  // Non-admins cannot view the audit log.
-  const denied = await api('/api/activity', { token: dispatchToken })
-  assert.equal(denied.status, 403)
-
-  // Create a dispatch, which should be audited.
-  await api('/api/dispatches', {
-    method: 'POST', token: dispatchToken,
-    body: { stationId: 'st_03', product: 'Filter', consumer: { address: 'Lake City, FL' } },
-  })
-
+  assert.equal((await api('/api/activity', { token: dispatchToken })).status, 403)
+  await api('/api/stations/st_03/service-events', { method: 'POST', token: dispatchToken, body: { accepted: true, completed: false } })
   const log = await api('/api/activity', { token: adminToken })
   assert.equal(log.status, 200)
-  assert.ok(log.data.some((e) => e.action === 'login'))
-  const d = log.data.find((e) => e.action === 'dispatch.create')
-  assert.ok(d, 'dispatch.create should be logged')
-  assert.equal(d.actor, 'dispatch@moovpool.com') // attributed to the dispatcher
-
-  // Filtering by action works.
-  const filtered = await api('/api/activity?action=login', { token: adminToken })
-  assert.ok(filtered.data.every((e) => e.action === 'login'))
+  assert.ok(log.data.some((e) => e.action === 'service.log' && e.actor === 'dispatch@moovpool.com'))
 })

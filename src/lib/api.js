@@ -38,12 +38,47 @@ export const api = {
   updateStation: (id, patch) => request(`/stations/${id}`, { method: 'PUT', body: patch }),
   deleteStation: (id) => request(`/stations/${id}`, { method: 'DELETE' }),
 
-  getDispatches: () => request('/dispatches'),
-  createDispatch: (d) => request('/dispatches', { method: 'POST', body: d }),
-  advanceDispatch: (id, status, note) => request(`/dispatches/${id}/events`, { method: 'POST', body: { status, note } }),
+  // Service log (manual performance entry)
+  getServiceEvents: (id) => request(`/stations/${id}/service-events`),
+  logServiceEvent: (id, e) => request(`/stations/${id}/service-events`, { method: 'POST', body: e }),
+  deleteServiceEvent: (id, eventId) => request(`/stations/${id}/service-events/${eventId}`, { method: 'DELETE' }),
+
+  // Documents (multipart)
+  getDocuments: (id) => request(`/stations/${id}/documents`),
+  async uploadDocument(id, docType, file) {
+    const fd = new FormData()
+    fd.append('docType', docType)
+    fd.append('file', file)
+    const headers = {}
+    if (getToken()) headers.Authorization = `Bearer ${getToken()}`
+    const res = await fetch(`/api/stations/${id}/documents`, { method: 'POST', headers, body: fd })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Upload failed')
+    return res.json()
+  },
+  deleteDocument: (id, docId) => request(`/stations/${id}/documents/${docId}`, { method: 'DELETE' }),
+
+  // Authenticated file download (carries the JWT, then triggers a browser save).
+  async download(path, filename) {
+    const headers = {}
+    if (getToken()) headers.Authorization = `Bearer ${getToken()}`
+    const res = await fetch('/api' + path, { headers })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Download failed')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || 'download'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+
+  // Data protection
+  getSnapshots: () => request('/admin/snapshots'),
+  createSnapshot: () => request('/admin/snapshot', { method: 'POST' }),
 
   geocode: (q) => request('/geocode?q=' + encodeURIComponent(q)),
-  respond: (token) => request('/respond', { method: 'POST', body: { token }, auth: false }),
 
   getUsers: () => request('/users'),
   createUser: (u) => request('/users', { method: 'POST', body: u }),

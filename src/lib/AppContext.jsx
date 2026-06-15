@@ -7,16 +7,13 @@ export function AppProvider({ children }) {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [stations, setStations] = useState([])
-  const [dispatches, setDispatches] = useState([])
   const [dataLoading, setDataLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const loadData = useCallback(async () => {
     setDataLoading(true)
     try {
-      const [s, d] = await Promise.all([api.getStations(), api.getDispatches()])
-      setStations(s)
-      setDispatches(d)
+      setStations(await api.getStations())
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -62,25 +59,21 @@ export function AppProvider({ children }) {
     setToken(null)
     setUser(null)
     setStations([])
-    setDispatches([])
   }, [])
 
-  // Mutations refresh from the server so every client stays consistent.
+  // Mutations refresh from the server so every client stays consistent and new
+  // stations / logged events immediately flow into Map, Zone Coverage, Analytics.
   const createStation = async (s) => {
-    await api.createStation(s)
+    const created = await api.createStation(s)
     await loadData()
+    return created
   }
   const updateStation = async (id, patch) => {
     await api.updateStation(id, patch)
     await loadData()
   }
-  const createDispatch = async (d) => {
-    const result = await api.createDispatch(d)
-    await loadData()
-    return result // { dispatch, email, delivery }
-  }
-  const advanceDispatch = async (id, status, note) => {
-    await api.advanceDispatch(id, status, note)
+  const logServiceEvent = async (id, e) => {
+    await api.logServiceEvent(id, e)
     await loadData()
   }
 
@@ -91,14 +84,12 @@ export function AppProvider({ children }) {
     login,
     logout,
     stations,
-    dispatches,
     dataLoading,
     error,
     refresh: loadData,
     createStation,
     updateStation,
-    createDispatch,
-    advanceDispatch,
+    logServiceEvent,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -111,5 +102,4 @@ export function useApp() {
 
 // Convenience hooks mirroring the old store API so pages need minimal changes.
 export const useStations = () => useApp().stations
-export const useDispatches = () => useApp().dispatches
 export const useRole = () => useApp().role

@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import { ROLES, can } from './lib/roles.js'
 import { useApp } from './lib/AppContext.jsx'
 import MapPage from './pages/MapPage.jsx'
@@ -7,25 +7,13 @@ import AnalyticsPage from './pages/AnalyticsPage.jsx'
 import StationsPage from './pages/StationsPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 import ActivityPage from './pages/ActivityPage.jsx'
-import RespondPage from './pages/RespondPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 
 export default function App() {
   const { user, authLoading } = useApp()
-  const location = useLocation()
-  const isRespond = location.pathname.startsWith('/respond/')
 
   if (authLoading) {
     return <div className="boot">Loading…</div>
-  }
-
-  // The accept/decline link is public — a station clicks it without logging in.
-  if (isRespond) {
-    return (
-      <Routes>
-        <Route path="/respond/:token" element={<RespondPage />} />
-      </Routes>
-    )
   }
 
   if (!user) return <LoginPage />
@@ -34,9 +22,8 @@ export default function App() {
 }
 
 function Shell() {
-  const { user, logout, dispatches } = useApp()
+  const { user, logout } = useApp()
   const navigate = useNavigate()
-  const openCount = dispatches.filter((d) => ['requested', 'accepted'].includes(d.status)).length
 
   return (
     <div className="app">
@@ -60,7 +47,7 @@ function Shell() {
             Analytics
           </NavLink>
           <NavLink to="/stations" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
-            Stations {openCount ? <span className="pill">{openCount} open</span> : null}
+            Stations
           </NavLink>
           {can(user.role, 'manageUsers') && (
             <NavLink to="/users" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
@@ -91,7 +78,6 @@ function Shell() {
           <Route path="/stations" element={<StationsPage />} />
           {can(user.role, 'manageUsers') && <Route path="/users" element={<UsersPage />} />}
           {can(user.role, 'viewAudit') && <Route path="/activity" element={<ActivityPage />} />}
-          <Route path="/respond/:token" element={<RespondPage />} />
         </Routes>
       </main>
     </div>

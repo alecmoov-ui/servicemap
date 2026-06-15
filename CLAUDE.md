@@ -5,8 +5,14 @@ to extend the app **without breaking the parts that already work.**
 
 ## What this is
 Moov Service Network: a shared, login-gated web app to manage an authorized US pool-
-equipment warranty service network — map + dispatch, coverage/gap analysis, analytics,
-and station/user management. Full-stack: React/Vite client + Express/SQLite API.
+equipment warranty service network — find authorized centers by product + radius,
+coverage/gap analysis, performance analytics, document storage, and station/user
+management. Full-stack: React/Vite client + Express/SQLite API.
+
+**Dispatching and dispatch emails live in Zendesk, NOT in this app.** Do not
+reintroduce dispatch/email/accept-token features. Performance data is entered manually
+via the per-station **Service Log** (`service_events`), copied from resolved Zendesk
+tickets; station performance and all analytics are DERIVED from those rows.
 
 ## Run / test / build (always do these before committing)
 ```bash
@@ -31,18 +37,19 @@ change that makes CI red.**
 ## Invariants — do not break these
 1. **Roles are enforced on the SERVER** (`server/src/auth.js`, `requirePermission`). UI
    gating (`src/lib/roles.js`) is convenience only — never rely on it for security.
-   Roles: `admin`, `dtm`, `dispatch`. Keep both lists in sync if you change permissions.
+   Roles: `admin`, `dtm`, `dispatch`. Keep both permission lists in sync.
 2. **Master station records (`is_master = 1`) can be edited but never deleted.** The
    delete route rejects them. Don't add a bypass.
-3. **Accept/decline tokens are signed and single-use** (`tokens.js` + the `respond`
-   route + `dispatches.token_used`). Don't make the respond endpoint require auth — the
-   external station is not a logged-in user.
-4. **Dispatch counters** (`dispatch_requests/accepted/jobs_completed`) update only via
-   `dispatchService.advance` / dispatch creation, and only on first transition. Don't
-   double-count.
-5. **Never commit secrets or the database.** `.env` and `server/data/` are gitignored.
-6. **Email is pluggable** (`email.js`): `log` (default), `smtp`, `graph`. Adding a
-   transport means editing only that file.
+3. **Performance is derived, not stored as counters.** `computePerfMap()` aggregates
+   `service_events`. Don't add denormalized counter columns back to `stations`.
+4. **Adding/editing a station or logging an event must immediately reflect in Map, Zone
+   Coverage, and Analytics** — they all read `stations` from `AppContext`, and mutations
+   call `loadData()`. Keep that single-source-of-truth flow.
+5. **Never commit secrets, the database, uploads, or backups.** `.env` and
+   `server/data/` are gitignored.
+6. **Documents** are stored on disk under `UPLOAD_DIR` with metadata in
+   `station_documents`; downloads are auth-gated and streamed. Keep the persistent disk
+   in mind for deployment.
 
 ## When you change things
 - Touching the DB schema → also update `rowToStation`/`stationToColumns` in `db.js`,
