@@ -15,23 +15,5 @@ export function haversineMiles(a, b) {
   return 2 * R_MILES * Math.asin(Math.sqrt(h))
 }
 
-// Geocode a free-text address to {lat,lng,label} using OpenStreetMap Nominatim.
-// No API key required. Subject to usage policy (1 req/sec) — fine for a single
-// operator dispatching. Swap this for Google/Mapbox later by changing this fn only.
-export async function geocodeAddress(query) {
-  const url =
-    'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' +
-    encodeURIComponent(query)
-  const res = await fetch(url, {
-    headers: { 'Accept-Language': 'en-US' },
-  })
-  if (!res.ok) throw new Error('Geocoding service error (' + res.status + ')')
-  const data = await res.json()
-  if (!data.length) throw new Error('No match found for that address.')
-  const hit = data[0]
-  return {
-    lat: parseFloat(hit.lat),
-    lng: parseFloat(hit.lon),
-    label: hit.display_name,
-  }
-}
+// Geocoding now goes through the backend proxy (server caches results and sets a
+// proper User-Agent). See src/lib/api.js -> api.geocode.

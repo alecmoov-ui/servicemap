@@ -1,0 +1,32 @@
+# Render Blueprint — one-click-ish deploy with a PERSISTENT DISK so data never
+# resets. In Render: New + -> Blueprint -> connect this repo. After it deploys,
+# set APP_URL to the live URL (and EMAIL_TRANSPORT/GRAPH_* when ready for real email).
+#
+# Any host that runs the Dockerfile works too (Azure App Service, Fly, a VM).
+
+services:
+  - type: web
+    name: moov-service-network
+    runtime: node
+    plan: starter            # smallest always-on paid tier (free tier sleeps)
+    buildCommand: npm run setup && npm run build
+    startCommand: npm --prefix server start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: JWT_SECRET       # auto-generated strong secret, kept stable
+        generateValue: true
+      - key: SEED_PASSWORD    # initial demo-account password; set your own
+        sync: false
+      # Keep the database, uploaded documents, and backups on the persistent disk.
+      - key: DB_PATH
+        value: /var/data/servicemap.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: BACKUP_DIR
+        value: /var/data/backups
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1

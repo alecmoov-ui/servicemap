@@ -1,15 +1,23 @@
 import { useMemo, useState } from 'react'
 import MapView from '../components/MapView.jsx'
-import DispatchModal from '../components/DispatchModal.jsx'
-import { useStations, useRole } from '../lib/useStore.js'
-import { geocodeAddress, haversineMiles } from '../lib/geo.js'
+import { useStations } from '../lib/useStore.js'
+import { api } from '../lib/api.js'
+import { haversineMiles } from '../lib/geo.js'
 import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completionRate } from '../lib/ratings.js'
-import { can } from '../lib/roles.js'
+
+// Built-in example service locations (coordinates included) so the search flow —
+// ranked list + radius circles — is usable even on a network that blocks the live
+// geocoder/tiles. Chosen near heat-pump-capable clusters.
+const EXAMPLES = [
+  { label: 'Orlando, FL', address: 'Orlando, FL', lat: 28.5383, lng: -81.3792 },
+  { label: 'Miami, FL', address: 'Miami, FL', lat: 25.7749, lng: -80.1937 },
+  { label: 'Tampa, FL', address: 'Tampa, FL', lat: 27.9506, lng: -82.4572 },
+  { label: 'Palmdale, CA', address: 'Palmdale, CA', lat: 34.6868, lng: -118.1542 },
+]
 
 export default function MapPage() {
   const allStations = useStations()
-  const role = useRole()
-  const stations = allStations.filter((s) => s.status !== 'prospect')
+  const stations = allStations.filter((s) => s.status === 'active')
 
   const [product, setProduct] = useState('heatPumps')
   const [address, setAddress] = useState('')
@@ -17,7 +25,6 @@ export default function MapPage() {
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
-  const [dispatchTarget, setDispatchTarget] = useState(null)
 
   // Stations that service the chosen product AND cover the consumer location,
   // ranked by reliability. No false positives: product + range are hard filters.
@@ -36,7 +43,7 @@ export default function MapPage() {
     setSearching(true)
     setError(null)
     try {
-      const geo = await geocodeAddress(address)
+      const geo = await api.geocode(address)
       setConsumer({ ...geo, address })
       setSelectedId(null)
     } catch (err) {
@@ -78,6 +85,24 @@ export default function MapPage() {
             </div>
           </form>
           {error && <div className="error">{error}</div>}
+
+          <div className="examples">
+            <span>No internet / blocked? Try an example:</span>
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex.label}
+                className="chip-mini"
+                onClick={() => {
+                  setAddress(ex.address)
+                  setConsumer(ex)
+                  setSelectedId(null)
+                  setError(null)
+                }}
+              >
+                {ex.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="results">
@@ -129,23 +154,15 @@ export default function MapPage() {
                 </div>
                 {selectedId === s.id && (
                   <div className="card-expand">
-                    <div className="kv"><span>Phone</span><b>{s.phone}</b></div>
-                    <div className="kv"><span>Email</span><b>{s.email}</b></div>
-                    <div className="kv"><span>Insurance</span><b>{s.proofOfInsurance || 'Not on file'}</b></div>
-                    <div className="kv"><span>HVAC cert</span><b>{s.hvacCertification || 'Not on file'}</b></div>
-                    {can(role, 'dispatch') ? (
-                      <button
-                        className="primary block"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDispatchTarget(s)
-                        }}
-                      >
-                        Send dispatch request
-                      </button>
-                    ) : (
-                      <div className="muted">Your role cannot send dispatches.</div>
-                    )}
+                    <div className="kv"><span>Contact</span><b>{s.primaryContact || '—'}</b></div>
+                    <div className="kv"><span>Phone</span><b>{s.phone || '—'}</b></div>
+                    <div className="kv"><span>Email</span><b>{s.email || '—'}</b></div>
+                    <div className="kv"><span>Radius</span><b>{s.serviceRadiusMi} mi</b></div>
+                    <div className="kv"><span>Insurance</span><b>{s.proofOfInsurance || (s.insuranceCarrier ? s.insuranceCarrier : 'Not on file')}</b></div>
+                    <div className="kv"><span>HVAC license</span><b>{s.hvacLicense || s.hvacCertification || '—'}</b></div>
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      Use these details to open/route the dispatch in Zendesk.
+                    </div>
                   </div>
                 )}
               </div>
@@ -163,16 +180,6 @@ export default function MapPage() {
           onSelect={setSelectedId}
         />
       </div>
-
-      {dispatchTarget && (
-        <DispatchModal
-          station={dispatchTarget}
-          consumer={consumer}
-          product={PRODUCTS.find((p) => p.key === product).label}
-          distanceMi={dispatchTarget.distanceMi}
-          onClose={() => setDispatchTarget(null)}
-        />
-      )}
     </div>
   )
 }

@@ -4,3 +4,10 @@ dist
 *.local
 .env
 .env.*
+
+# SQLite database, backups, and uploaded documents (runtime data)
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+server/data/backups/
+server/data/uploads/

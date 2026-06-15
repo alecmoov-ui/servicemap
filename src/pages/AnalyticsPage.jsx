@@ -3,16 +3,15 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   FunnelChart, Funnel, LabelList, Cell,
 } from 'recharts'
-import { useStations, useDispatches } from '../lib/useStore.js'
+import { useStations } from '../lib/useStore.js'
 import { reliabilityScore, acceptanceRate, completionRate, PRODUCTS } from '../lib/ratings.js'
 
 export default function AnalyticsPage() {
   const stations = useStations()
-  const dispatches = useDispatches()
 
-  // Network-wide funnel from the seeded performance counters + live dispatches.
+  // Network-wide funnel from the service log (aggregated station performance).
   const totals = useMemo(() => {
-    const base = stations.reduce(
+    return stations.reduce(
       (a, s) => ({
         req: a.req + (s.perf?.dispatchRequests || 0),
         acc: a.acc + (s.perf?.dispatchAccepted || 0),
@@ -20,11 +19,7 @@ export default function AnalyticsPage() {
       }),
       { req: 0, acc: 0, comp: 0 }
     )
-    base.req += dispatches.length
-    base.acc += dispatches.filter((d) => ['accepted', 'completed'].includes(d.status)).length
-    base.comp += dispatches.filter((d) => d.status === 'completed').length
-    return base
-  }, [stations, dispatches])
+  }, [stations])
 
   const funnel = [
     { name: 'Requested', value: totals.req, fill: '#2d6cdf' },
@@ -60,17 +55,12 @@ export default function AnalyticsPage() {
     [stations]
   )
 
-  // Avg time-to-resolution from live dispatches that completed.
+  // Avg completion duration (days), averaged across stations that have data.
   const avgResolution = useMemo(() => {
-    const done = dispatches.filter((d) => d.status === 'completed' && d.timeline?.length > 1)
-    if (!done.length) return null
-    const hrs = done.map((d) => {
-      const t0 = new Date(d.timeline[0].at).getTime()
-      const t1 = new Date(d.timeline[d.timeline.length - 1].at).getTime()
-      return (t1 - t0) / 36e5
-    })
-    return hrs.reduce((a, b) => a + b, 0) / hrs.length
-  }, [dispatches])
+    const vals = stations.map((s) => s.perf?.avgCompletionDays).filter((v) => v != null)
+    if (!vals.length) return null
+    return vals.reduce((a, b) => a + b, 0) / vals.length
+  }, [stations])
 
   const acc = totals.req ? Math.round((totals.acc / totals.req) * 100) : 0
   const comp = totals.acc ? Math.round((totals.comp / totals.acc) * 100) : 0
@@ -82,7 +72,7 @@ export default function AnalyticsPage() {
         <Kpi label="Dispatch requests" value={totals.req} />
         <Kpi label="Acceptance rate" value={acc + '%'} />
         <Kpi label="Completion rate" value={comp + '%'} />
-        <Kpi label="Avg resolution" value={avgResolution != null ? avgResolution.toFixed(1) + ' h' : '—'} />
+        <Kpi label="Avg completion" value={avgResolution != null ? avgResolution.toFixed(1) + ' days' : '—'} />
       </div>
 
       <div className="charts">

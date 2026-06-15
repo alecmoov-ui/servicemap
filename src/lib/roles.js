@@ -4,18 +4,18 @@
 export const ROLES = {
   admin: {
     label: 'Admin',
-    blurb: 'Full control: edit master list, manage users, all analytics.',
-    can: { editStations: true, addStations: true, dispatch: true, viewAnalytics: true, manageUsers: true },
+    blurb: 'Full control: edit master list, manage users, view activity log, export/backup, all analytics.',
+    can: { editStations: true, addStations: true, logService: true, viewAnalytics: true, manageUsers: true, viewAudit: true, exportData: true },
   },
   dtm: {
     label: 'DTM (Territory Mgr)',
-    blurb: 'Manage their territory: add/vet stations, dispatch, see coverage gaps.',
-    can: { editStations: true, addStations: true, dispatch: true, viewAnalytics: true, manageUsers: false },
+    blurb: 'Manage their territory: add/vet stations, log service events, export, see coverage gaps.',
+    can: { editStations: true, addStations: true, logService: true, viewAnalytics: true, manageUsers: false, viewAudit: false, exportData: true },
   },
   dispatch: {
     label: 'Dispatch',
-    blurb: 'Send dispatch requests and track them. Read-only on the master list.',
-    can: { editStations: false, addStations: false, dispatch: true, viewAnalytics: true, manageUsers: false },
+    blurb: 'Find authorized centers and log service outcomes from Zendesk. Read-only on the master list.',
+    can: { editStations: false, addStations: false, logService: true, viewAnalytics: true, manageUsers: false, viewAudit: false, exportData: false },
   },
 }
 

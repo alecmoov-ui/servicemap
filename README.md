@@ -1,164 +1,201 @@
 # Moov Service Network
 
-A prototype web app for managing Moov Pool's US warranty service network: map your
-authorized service stations, match them to an end-user's location by **product type
-+ service radius**, send/log **dispatch requests**, and analyze network
-**performance**. Built from the 37 stations in your current spreadsheet.
+A full-stack web app for managing Moov Pool's US warranty service network: find the
+**authorized centers** that can cover a client's address by **product type + service
+radius**, spot **coverage gaps**, store each station's **agreement documents**, and
+analyze network **performance** — with real accounts, roles, and a shared database.
+Seeded from the 37 stations in your spreadsheet.
 
-> **Status:** clickable prototype (frontend-only). All data lives in your browser.
-> The baked-in master list of 37 stations is protected; your edits and dispatches are
-> stored separately and can be reset to the clean master at any time. See
-> [Going to production](#going-to-production) for the path to a real multi-user system.
+> **Dispatching and dispatch emails are handled in Zendesk**, where the full ticket
+> lifecycle (support → service → dispatch → resolved) is tracked. This tool is for
+> *finding* centers and *recording* their performance — the team copies key fields from
+> a resolved Zendesk ticket into the per-station **Service Log**, and all analytics
+> derive from that.
+
+- **Frontend:** React + Vite + Leaflet (search/map, coverage, analytics, stations screens).
+- **Backend:** Node + Express + SQLite — JWT auth, server-enforced roles, a protected
+  master station list, document storage, a manual service log, CSV export, and backups.
 
 ---
 
-## Quick start
+## Running it
+
+You need **Node.js 18+** (`node -v`) and **Git**. This is a real client/server app, so
+it runs on a machine where you can run Node (your dev box, a server, or a cloud host) —
+not by double-clicking a file. No API keys required to run locally.
 
 ```bash
-npm install
-npm run dev        # open http://localhost:5173
+git clone <your-repo-url>
+cd servicemap
+git checkout claude/loving-carson-kx6f00
+
+npm run setup       # installs client AND server dependencies
+npm run dev:all     # starts the API (:3001) and the client (:5173) together
 ```
 
-The map tiles and the address search (geocoding) call free public services
-(OpenStreetMap / Nominatim) and need normal internet access — they work from your
-machine. No API keys required for the prototype.
+Open the client URL it prints (**http://localhost:5173**) and sign in with a demo
+account below. The backend seeds the 37 stations and the demo users automatically on
+first run (creating `server/data/servicemap.db`).
+
+### Demo accounts (password `moov1234`)
+| Email | Role | Can do |
+|-------|------|--------|
+| `admin@moovpool.com` | **Admin** | everything, incl. delete non-master stations |
+| `dtm@moovpool.com` | **DTM** | edit/add stations, dispatch, analytics |
+| `dispatch@moovpool.com` | **Dispatch** | dispatch + read-only on the master list |
+
+> Change the seed password by setting `SEED_PASSWORD` before the first run, or manage
+> real users in the `users` table. **Set a strong `JWT_SECRET` in production.**
+
+### One-process production mode
+```bash
+npm start           # builds the client, then serves it AND the API from :3001
+```
+Then open **http://localhost:3001**. (`npm start` runs `vite build` and the Express
+server, which serves the built client.)
+
+### Pinpoint address pins
+Station pins ship at city-center precision so they show immediately. To refine all 37
+to exact street level (OpenStreetMap, no key, ~45s):
+```bash
+npm run geocode
+```
+Adding a station in the app and leaving lat/lng blank also auto-geocodes the address.
 
 ---
 
-## What it does today
+## Features
 
-### 1. Map & Dispatch (the core flow)
-- **Pick an equipment type** (Heat Pump, Pump, Filter, Salt System, Cleaner, Light).
-- **Type the end-user's service address.** It geocodes the address and finds **only**
-  stations that (a) are authorized for that product **and** (b) cover the location
-  within the radius each station declared at signup. No false positives.
-- Results are **ranked by a reliability score** (see below) with a **star rating**,
-  acceptance %, completion %, distance, and inventory flag.
-- The map zooms to fit and draws **service-radius zone circles** for the matching
-  stations; the selected station highlights.
-- **Send dispatch request** composes the exact email from `Serviceuse@moovpool.com`
-  to the station with **Accept / Decline links**, logs the attempt, and (in this
-  prototype) previews the message. Opening the accept/decline link records the
-  station's response and moves the job through the funnel.
+### Map & Search (find authorized centers)
+Pick an equipment type, enter the client's address (geocoded via the backend), and get
+**only** stations that service that product **and** cover the location within their
+declared radius — ranked by reliability with a star rating. The map draws service-radius
+zone circles and shows each center's contact details to route the dispatch in Zendesk.
 
-### 2. Stations
-- **Dispatch board** — live cards for every request with status timeline
-  (requested → accepted → completed / declined / issue). Advance jobs manually to
-  stand in for email-thread replies.
-- **Master station list** — every field from your spreadsheet plus the recommended
-  additions. **Role-gated:** Admin/DTM can add & edit; Dispatch is read-only. Edits
-  to master records are stored as an overlay so the original is never destroyed.
+### Zone Coverage
+A second map showing **coverage density** (overlapping radii shade darker) and **gap
+detection** against major US metros — uncovered metros appear as red pins sized by
+population, with a ranked recruiting-target list. Filterable by product.
 
-### 3. Analytics
-- KPIs: active stations, total requests, acceptance rate, completion rate, avg
-  time-to-resolution.
-- Dispatch funnel, stations-by-state (capacity & gaps), product coverage, and a
-  reliability leaderboard.
+### Analytics
+Network KPIs, the requested→accepted→completed funnel, stations-by-state, product
+coverage, average completion duration, and a reliability leaderboard — all derived from
+the Service Log.
 
-### Roles (demo switcher, top-right)
-| Role | Edit master list | Add stations | Dispatch | Analytics |
-|------|:---:|:---:|:---:|:---:|
-| **Admin** | ✅ | ✅ | ✅ | ✅ |
-| **DTM** (Territory Mgr) | ✅ | ✅ | ✅ | ✅ |
-| **Dispatch** | ❌ (read-only) | ❌ | ✅ | ✅ |
+### Stations
+The **master station list** with the full Schedule A profile (identity, location +
+radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:
+- **Log** a service event (the manual analytics entry — see below).
+- **Edit** the profile and **upload documents**: Service Contract, Schedule A, HVAC
+  License, Proof of Insurance.
+- **Export CSV** of all stations (data backup / Excel) and create **database snapshots**.
 
-### Reliability score
-A 0–100 composite from your dispatch funnel: `acceptance × 55 + completion × 35 +
-volume boost (up to 10)`. New/unproven stations get a neutral baseline (60) so they
-still surface for vetting instead of being buried. The 0–5 star rating is derived from
-the same score. Tune the weights in `src/lib/ratings.js`.
+Editing is **role-gated and enforced on the server**: Dispatch is read-only on the list
+(but can log events); DTM/Admin edit and add. Master (seed) records can be edited but
+never deleted — the API rejects it — so the master map can't be destroyed. Adding a
+station immediately appears in Map, Zone Coverage, and Analytics.
 
-> The performance numbers in the prototype are **demo values** generated
-> deterministically per station so the ranking and charts are populated. Real numbers
-> accrue as you send dispatches.
+### Service Log (manual analytics entry)
+Because dispatching happens in Zendesk, the team records outcomes here: one quick entry
+per resolved ticket (date, product, accepted?, completed?, days-to-complete, ticket #).
+Station performance and **all analytics are derived automatically** from these entries —
+no running totals to maintain by hand.
 
----
+### Users (Admin only)
+Invite/manage team members and set their role. Guardrails prevent deleting your own
+account or removing the last admin.
 
-## Data model
-
-Each station carries everything from your sheet — company, address, city/state,
-service radius, the six product flags, HVAC cert, proof of insurance, phone, email,
-billing address, service type, holds-inventory, notes — plus the dispatch counters
-(requests / accepted / completed). See `src/data/stations.seed.json`.
-
-### Recommended fields to start collecting (already in the model/edit form)
-Building the network from scratch, capture these at signup — they pay off fast:
-
-- **Coordinates (lat/lng)** — exact, so radius math and pins are precise. The
-  prototype seeds *city-center* coordinates; refine to street level (the edit form
-  takes lat/lng, or wire the geocoder into the save step).
-- **Contract on file + contract expiry** — surface renewals before they lapse.
-- **Insurance expiry + W-9 on file** — compliance gating; block dispatch if expired.
-- **Status** (active / paused / prospect) — keep prospects on the map for recruiting
-  without dispatching to them.
-- **After-hours / emergency availability** and **response SLA** — for urgent RMAs.
-- **Preferred contact method** and a **secondary contact**.
-
-### Worth adding as you scale
-- **Per-product labor rates / flat-fee schedule** and **travel-fee policy** — so
-  dispatch shows expected cost and you can reconcile invoices.
-- **Capacity/throttle** (max open jobs) so high performers don't get overloaded.
-- **Brands/competitor equipment serviced** and **certifications per product**.
-- **Languages**, **service-area polygons** (not just a radius) for coastal/rural cases.
-- **Document attachments** (signed contract PDF, COI, W-9) on the record.
-- **First-right-of-refusal link to the selling dealer** — capture which dealer sold
-  the unit so you can route the offer to them first, then fall back to the network.
-
----
-
-## Going to production
-
-The prototype intentionally has no backend. The realistic next step is a thin
-backend so data is shared, protected, and auditable:
-
-- **Backend + database** (Node/Express + Postgres, or Supabase/Firebase). The
-  "master list" becomes a write-protected table; all edits go through an API with
-  **role checks** (Admin / DTM / Dispatch / read-only) — the exact gates already
-  modeled in `src/lib/roles.js`. This is what truly protects the master map from any
-  one user damaging it, with full change history.
-- **Real email** from `Serviceuse@moovpool.com` via **Microsoft Graph `sendMail`**
-  (your mailbox is Microsoft 365). Register an Azure AD app, grant `Mail.Send`, and
-  replace `sendDispatchEmail` in `src/lib/email.js` with a backend call. The
-  Accept/Decline links become **signed, single-use tokens** validated server-side, so
-  a station's click is authenticated and logged automatically.
-- **Email-thread ingestion** — a Graph subscription on the mailbox parses replies on
-  the dispatch thread to auto-advance jobs to *Completed* or *Issue* and attach the
-  conversation to the record (your "side conversation" idea).
-- **Geocoding** — for volume, move to Google/Mapbox with a key and cache results;
-  swap the single function in `src/lib/geo.js`.
-- **Auth** — SSO with your Microsoft 365 tenant; map AD groups to the roles above.
-
-### Suggested roadmap
-1. **MVP backend** — Postgres + auth + roles; import the spreadsheet; replace
-   localStorage with API calls (the UI is already structured for this).
-2. **Real dispatch email** — Graph sendMail + signed accept/decline tokens.
-3. **Thread ingestion & SLA timers** — auto-status from replies; overdue alerts.
-4. **Recruiting view for DTMs** — heatmap of coverage gaps (uncovered searches /
-   states with low capacity) to target where to sign new stations.
-5. **Dealer first-right-of-refusal routing** and **cost/invoice reconciliation**.
+### Roles & reliability
+Permissions live in `server/src/auth.js` (enforced) and `src/lib/roles.js` (UI gating).
+The 0–100 reliability score (`src/lib/ratings.js`) blends acceptance, completion, and
+volume; new stations get a neutral baseline so they still surface. Seed performance
+numbers are demo values; real numbers accrue as the team logs events.
 
 ---
 
 ## Project structure
 ```
-src/
-  data/stations.seed.json   # the 37 stations (protected master list)
+src/                         # React client
   lib/
-    geo.js                  # haversine + address geocoding (swap provider here)
-    ratings.js              # product list + reliability score / stars
-    roles.js                # Admin / DTM / Dispatch permissions
-    email.js                # dispatch email composer + pluggable transport
-    store.js                # localStorage overlay (edits, adds, dispatches)
-    useStore.js             # React hooks bound to the store
-  components/
-    MapView.jsx             # Leaflet map: pins, radius circles, consumer pin
-    DispatchModal.jsx       # dispatch request + email preview
-  pages/
-    MapPage.jsx             # filter → search → ranked list → dispatch
-    AnalyticsPage.jsx       # KPIs, funnel, coverage, leaderboard
-    StationsPage.jsx        # dispatch board + master list management
-    RespondPage.jsx         # accept/decline link landing
+    api.js                   # API client (JWT, downloads, error handling)
+    AppContext.jsx           # auth + data provider
+    geo.js / ratings.js / roles.js
+  pages/  Map, Coverage, Analytics, Stations, Users, Activity, Login
+  components/  MapView
+  data/  stations.seed.json (the 37 stations), metros.js
+server/                      # Express + SQLite API
+  src/
+    index.js                 # entry: starts the server
+    app.js                   # buildApp() — used by index.js and the tests
+    db.js                    # schema + row<->API mapping + perf aggregation
+    seed.js                  # seeds 37 stations + users + demo service log
+    auth.js                  # JWT + role enforcement
+    activity.js              # audit log helpers
+    routes/  auth, stations (incl. service-log/documents/export), geocode, users, activity, admin
+  test/api.test.js           # backend integration tests
+  scripts/backup.js          # online SQLite backup + retention
+  .env.example
+scripts/geocode-stations.mjs # one-time pin refinement
+Dockerfile, render.yaml      # deployment
+.github/workflows/ci.yml     # CI: tests + build on every push
 ```
 
-**Reset demo data:** the *Reset* button (top-right) clears your local edits and
-dispatches and restores the clean 37-station master list.
+---
+
+## Deployment (hosted, persistent, always-on)
+
+The app is meant to run as one shared service your team logs into. It serves the client
+and API from a single port and stores data in SQLite on a **persistent disk** so nothing
+resets across restarts/redeploys.
+
+### Option 1 — Render (blueprint included)
+`render.yaml` defines a web service **with a 1 GB persistent disk** mounted at `/var/data`
+(the DB, uploaded documents, and backups all live there). In Render: **New + → Blueprint
+→ connect this repo.** `JWT_SECRET` is auto-generated and kept stable.
+
+### Option 2 — Docker (Render/Azure/Fly/VM — anywhere)
+```bash
+docker build -t moov-service .
+docker run -p 3001:3001 -v moovdata:/app/server/data \
+  -e JWT_SECRET=$(openssl rand -hex 32) -e APP_URL=https://your-url moov-service
+```
+The `-v moovdata:/app/server/data` volume is what makes data persist. Azure App Service
+(Microsoft-aligned) runs this same image with an attached storage mount.
+
+### Domain & SSL
+Optional. The host gives you a working HTTPS URL out of the box (SSL auto-issued/renewed
+— nothing to buy or install). To brand it, add a subdomain like `service.moovpool.com` in
+the host dashboard and create the one DNS record it shows you; SSL re-issues automatically.
+
+### Required production env vars
+`JWT_SECRET` (strong, stable), `DB_PATH`, `UPLOAD_DIR`, and `BACKUP_DIR` (all on the
+persistent disk), and `SEED_PASSWORD` (initial admin password). See `server/.env.example`.
+
+## Reliability & maintenance (the safety net)
+
+- **Tests** — `npm --prefix server test` covers auth, role enforcement, master-record
+  protection, the service log + derived performance, CSV export, and user management. Run
+  before any change.
+- **CI** — `.github/workflows/ci.yml` runs tests + build on every push/PR, so a breaking
+  change fails *before* it ships.
+- **Rollback** — every change is a Git commit; tag releases (`git tag v1.0`) to return to
+  a known-good version instantly. Hosts also keep deploy history for one-click rollback.
+- **Data protection (3 layers):**
+  1. **CSV export** (Stations → Export CSV) — a portable backup of every station you can
+     open in Excel and keep alongside your own master sheet.
+  2. **Database snapshots** (Stations → Backups, admin) — full save-points you can create
+     on demand and download. Also run `npm --prefix server run backup` on a weekly cron
+     for automatic save-points (keeps the last 14).
+  3. **Restore** is an ops step: stop the server, replace `server/data/servicemap.db`
+     with the chosen snapshot, restart. (Uploaded documents live under `UPLOAD_DIR` and
+     should be on the same persistent disk / backed up together.)
+- **`CLAUDE.md`** — conventions and "don't break these" rules for future changes.
+
+## What's next (roadmap)
+1. **Demand-weighted gaps** — replace the metro list with your units-sold / RMA volume by
+   region so coverage gaps reflect where failures will actually happen.
+2. **Zendesk integration** — optionally pull resolved-ticket data via the Zendesk API to
+   auto-populate the Service Log instead of manual entry.
+3. **Document expiry reminders** — surface insurance/contract expiry dates that are
+   approaching.
+4. **Postgres + migrations** — swap `server/src/db.js` when you outgrow SQLite.
