@@ -20,14 +20,22 @@ Seeded from the 37 stations in your spreadsheet.
 
 ## Running it
 
-You need **Node.js 18+** (`node -v`) and **Git**. This is a real client/server app, so
-it runs on a machine where you can run Node (your dev box, a server, or a cloud host) —
-not by double-clicking a file. No API keys required to run locally.
+You need **Node.js 18+** (`node -v`). The app runs on a machine where you can run Node.
 
+### Easiest way (Windows, no terminal)
+1. Download the repo as a ZIP (green **Code** button → **Download ZIP**) and extract it.
+2. Double-click **`start-windows.bat`** in the extracted folder. It installs everything
+   on first run, starts the app, and opens your browser. Keep the window open while using
+   the app. (On macOS: `chmod +x start-mac.command` once, then double-click it.)
+
+> Windows note: if PowerShell says *"running scripts is disabled on this system"* when
+> you type `npm`, use **Command Prompt** instead (File Explorer address bar → type
+> `cmd`), where `npm` works normally — or just use `start-windows.bat`.
+
+### With a terminal
 ```bash
 git clone <your-repo-url>
 cd servicemap
-git checkout claude/loving-carson-kx6f00
 
 npm run setup       # installs client AND server dependencies
 npm run dev:all     # starts the API (:3001) and the client (:5173) together
