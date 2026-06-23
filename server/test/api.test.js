@@ -131,6 +131,33 @@ test('user management: admin only; cannot delete the last admin', async () => {
   assert.equal((await api(`/api/users/${adminId}`, { method: 'DELETE', token: adminToken })).status, 400)
 })
 
+test('compliance: flags expired insurance, heat-pump w/o license, and clears when OK', async () => {
+  const token = await tokenFor('admin@moovpool.com')
+
+  // Expired insurance -> level 'expired'
+  const expired = await api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'Lapsed Insurance Co', city: 'X', state: 'TX', insuranceExpiry: '2020-01-01', products: { pumps: true } },
+  })
+  assert.equal(expired.data.compliance.level, 'expired')
+  assert.ok(expired.data.compliance.issues.some((i) => /Insurance expired/.test(i.message)))
+
+  // Heat-pump qualified but no HVAC license -> 'warn'
+  const hp = await api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'No License HVAC', city: 'Y', state: 'AZ', insuranceExpiry: '2099-01-01', products: { heatPumps: true } },
+  })
+  assert.equal(hp.data.compliance.level, 'warn')
+  assert.ok(hp.data.compliance.issues.some((i) => /HVAC license/.test(i.message)))
+
+  // Insurance far in the future, not heat-pump, license n/a -> 'ok'
+  const ok = await api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'All Good Pools', city: 'Z', state: 'FL', insuranceExpiry: '2099-01-01', products: { pumps: true } },
+  })
+  assert.equal(ok.data.compliance.level, 'ok')
+})
+
 test('activity log: admin-only, records service-log entries', async () => {
   const adminToken = await tokenFor('admin@moovpool.com')
   const dispatchToken = await tokenFor('dispatch@moovpool.com')

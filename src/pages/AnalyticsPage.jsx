@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { useStations } from '../lib/useStore.js'
 import { reliabilityScore, acceptanceRate, completionRate, PRODUCTS } from '../lib/ratings.js'
+import { complianceClass, complianceLabel, issueText } from '../lib/compliance.js'
 
 export default function AnalyticsPage() {
   const stations = useStations()
@@ -62,6 +63,14 @@ export default function AnalyticsPage() {
     return vals.reduce((a, b) => a + b, 0) / vals.length
   }, [stations])
 
+  // Stations needing compliance attention (expired first, then warnings).
+  const flagged = useMemo(() => {
+    const rank = { expired: 0, warn: 1, ok: 2 }
+    return stations
+      .filter((s) => s.compliance && s.compliance.level !== 'ok')
+      .sort((a, b) => rank[a.compliance.level] - rank[b.compliance.level])
+  }, [stations])
+
   const acc = totals.req ? Math.round((totals.acc / totals.req) * 100) : 0
   const comp = totals.acc ? Math.round((totals.comp / totals.acc) * 100) : 0
 
@@ -73,6 +82,7 @@ export default function AnalyticsPage() {
         <Kpi label="Acceptance rate" value={acc + '%'} />
         <Kpi label="Completion rate" value={comp + '%'} />
         <Kpi label="Avg completion" value={avgResolution != null ? avgResolution.toFixed(1) + ' days' : '—'} />
+        <Kpi label="Compliance flags" value={flagged.length} />
       </div>
 
       <div className="charts">
@@ -132,6 +142,28 @@ export default function AnalyticsPage() {
               ))}
             </tbody>
           </table>
+        </Panel>
+
+        <Panel title={`Compliance & expirations (${flagged.length})`}>
+          {flagged.length === 0 ? (
+            <div className="empty">All stations are current — no expired/expiring insurance or contracts, and no missing heat-pump licenses.</div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr><th>Station</th><th>ST</th><th>Status</th><th>Issues</th></tr>
+              </thead>
+              <tbody>
+                {flagged.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.company}</td>
+                    <td>{s.state}</td>
+                    <td><span className={'badge ' + complianceClass(s.compliance.level)}>{complianceLabel(s.compliance.level)}</span></td>
+                    <td style={{ fontSize: 12 }}>{issueText(s.compliance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Panel>
       </div>
     </div>

@@ -147,6 +147,11 @@ export default function MapPage() {
                 <div className="card-meta">
                   {s.distanceMi.toFixed(1)} mi · {s.city}, {s.state} · {s.serviceType}
                 </div>
+                {s.compliance && s.compliance.level !== 'ok' && (
+                  <div className={'compliance-chip ' + s.compliance.level} title={s.compliance.issues.map((i) => i.message).join(' · ')}>
+                    {s.compliance.level === 'expired' ? '✕ Compliance: action needed' : '⚠ Compliance: review'}
+                  </div>
+                )}
                 <div className="card-stats">
                   <span>Accept {acc != null ? Math.round(acc * 100) + '%' : '—'}</span>
                   <span>Complete {comp != null ? Math.round(comp * 100) + '%' : '—'}</span>

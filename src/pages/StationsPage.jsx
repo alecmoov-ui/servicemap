@@ -3,6 +3,7 @@ import { useApp } from '../lib/AppContext.jsx'
 import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
+import { complianceLabel, complianceClass, issueText } from '../lib/compliance.js'
 
 const DOC_SLOTS = [
   { key: 'contract', label: 'Service Contract' },
@@ -50,7 +51,7 @@ export default function StationsPage() {
             <thead>
               <tr>
                 <th>Company</th><th>Location</th><th>Radius</th><th>Products</th>
-                <th>Score</th><th>Accept</th><th>Avg days</th><th>Status</th><th></th>
+                <th>Score</th><th>Accept</th><th>Avg days</th><th>Compliance</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -70,6 +71,9 @@ export default function StationsPage() {
                   <td><b>{reliabilityScore(s.perf)}</b></td>
                   <td>{acceptanceRate(s.perf) != null ? Math.round(acceptanceRate(s.perf) * 100) + '%' : '—'}</td>
                   <td>{s.perf.avgCompletionDays != null ? s.perf.avgCompletionDays : '—'}</td>
+                  <td title={issueText(s.compliance)}>
+                    <span className={'badge ' + complianceClass(s.compliance?.level)}>{complianceLabel(s.compliance?.level)}</span>
+                  </td>
                   <td><span className={'badge ' + s.status}>{s.status}</span></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {can(role, 'logService') && <button className="ghost small" onClick={() => setLogging(s)}>Log</button>}{' '}

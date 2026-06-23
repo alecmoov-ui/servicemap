@@ -7,6 +7,7 @@ import multer from 'multer'
 import { db, rowToStation, stationToColumns, computePerfMap, rowToServiceEvent, rowToDocument, DOC_TYPES } from '../db.js'
 import { requireAuth, requirePermission } from '../auth.js'
 import { logFromReq } from '../activity.js'
+import { computeCompliance } from '../compliance.js'
 
 export const stationsRouter = Router()
 stationsRouter.use(requireAuth)
@@ -18,12 +19,33 @@ const upload = multer({ dest: UPLOAD_DIR, limits: { fileSize: 15 * 1024 * 1024 }
 
 const getStation = (id) => db.prepare('SELECT * FROM stations WHERE id = ?').get(id)
 
+// Build a station's API object with its derived performance + compliance attached.
+function withDerived(row, perf) {
+  const station = rowToStation(row, perf)
+  const docTypes = new Set(
+    db.prepare('SELECT doc_type FROM station_documents WHERE station_id = ?').all(row.id).map((d) => d.doc_type)
+  )
+  station.compliance = computeCompliance(station, docTypes)
+  return station
+}
+
 // ---- Stations -------------------------------------------------------------
 
 stationsRouter.get('/', (req, res) => {
   const perf = computePerfMap()
+  // Batch document presence by station to avoid a query per row.
+  const docMap = {}
+  for (const d of db.prepare('SELECT station_id, doc_type FROM station_documents').all()) {
+    ;(docMap[d.station_id] ||= new Set()).add(d.doc_type)
+  }
   const rows = db.prepare('SELECT * FROM stations ORDER BY company').all()
-  res.json(rows.map((r) => rowToStation(r, perf[r.id])))
+  res.json(
+    rows.map((r) => {
+      const station = rowToStation(r, perf[r.id])
+      station.compliance = computeCompliance(station, docMap[r.id] || new Set())
+      return station
+    })
+  )
 })
 
 // CSV export of every station + key fields (data backup / Excel).
@@ -72,7 +94,7 @@ stationsRouter.post('/', requirePermission('addStations'), (req, res) => {
   const keys = Object.keys(cols)
   db.prepare(`INSERT INTO stations (${keys.join(', ')}) VALUES (${keys.map((k) => '@' + k).join(', ')})`).run(cols)
   logFromReq(req, { action: 'station.create', entityType: 'station', entityId: id, summary: `Added station ${s.company}` })
-  res.status(201).json(rowToStation(getStation(id), computePerfMap()[id]))
+  res.status(201).json(withDerived(getStation(id), computePerfMap()[id]))
 })
 
 stationsRouter.put('/:id', requirePermission('editStations'), (req, res) => {
@@ -85,7 +107,7 @@ stationsRouter.put('/:id', requirePermission('editStations'), (req, res) => {
       .run({ id: req.params.id, ...cols })
   }
   logFromReq(req, { action: 'station.update', entityType: 'station', entityId: req.params.id, summary: `Edited station ${existing.company}` })
-  res.json(rowToStation(getStation(req.params.id), computePerfMap()[req.params.id]))
+  res.json(withDerived(getStation(req.params.id), computePerfMap()[req.params.id]))
 })
 
 // Master records are protected: only non-master stations can be deleted, admin only.
@@ -124,7 +146,7 @@ stationsRouter.post('/:id/service-events', requirePermission('logService'), (req
     action: 'service.log', entityType: 'station', entityId: req.params.id,
     summary: `Logged service event${b.zendeskTicket ? ' (Zendesk ' + b.zendeskTicket + ')' : ''}: ${accepted ? 'accepted' : 'declined'}${completed ? ', completed' : ''}`,
   })
-  res.status(201).json(rowToStation(getStation(req.params.id), computePerfMap()[req.params.id]))
+  res.status(201).json(withDerived(getStation(req.params.id), computePerfMap()[req.params.id]))
 })
 
 stationsRouter.delete('/:id/service-events/:eventId', requirePermission('logService'), (req, res) => {
