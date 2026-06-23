@@ -61,6 +61,19 @@ export function AppProvider({ children }) {
     setStations([])
   }, [])
 
+  // If any API call reports the session expired/invalid, return to the login screen.
+  useEffect(() => {
+    const onUnauthorized = () => logout()
+    window.addEventListener('moov:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('moov:unauthorized', onUnauthorized)
+  }, [logout])
+
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    await api.changePassword(currentPassword, newPassword)
+    const { user } = await api.me() // reflects cleared mustChangePassword flag
+    setUser(user)
+  }, [])
+
   // Mutations refresh from the server so every client stays consistent and new
   // stations / logged events immediately flow into Map, Zone Coverage, Analytics.
   const createStation = async (s) => {
@@ -83,6 +96,7 @@ export function AppProvider({ children }) {
     authLoading,
     login,
     logout,
+    changePassword,
     stations,
     dataLoading,
     error,

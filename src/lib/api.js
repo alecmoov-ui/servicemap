@@ -22,6 +22,11 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
     /* no body */
   }
   if (!res.ok) {
+    // Session expired or token invalid mid-use: sign out cleanly.
+    if (res.status === 401 && auth && getToken()) {
+      setToken(null)
+      window.dispatchEvent(new Event('moov:unauthorized'))
+    }
     const err = new Error(data?.error || `Request failed (${res.status})`)
     err.status = res.status
     throw err
@@ -32,6 +37,8 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
 export const api = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password }, auth: false }),
   me: () => request('/auth/me'),
+  changePassword: (currentPassword, newPassword) =>
+    request('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } }),
 
   getStations: () => request('/stations'),
   createStation: (s) => request('/stations', { method: 'POST', body: s }),

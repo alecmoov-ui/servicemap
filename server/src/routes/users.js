@@ -8,7 +8,7 @@ export const usersRouter = Router()
 usersRouter.use(requireAuth, requirePermission('manageUsers'))
 
 const ROLES = ['admin', 'dtm', 'dispatch']
-const safe = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, createdAt: u.created_at })
+const safe = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, createdAt: u.created_at, mustChangePassword: !!u.must_change_password })
 const adminCount = () => db.prepare("SELECT COUNT(*) n FROM users WHERE role = 'admin'").get().n
 
 usersRouter.get('/', (req, res) => {
@@ -24,7 +24,7 @@ usersRouter.post('/', (req, res) => {
   const exists = db.prepare('SELECT 1 FROM users WHERE email = ?').get(email.toLowerCase().trim())
   if (exists) return res.status(409).json({ error: 'A user with that email already exists' })
   const info = db
-    .prepare('INSERT INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
+    .prepare('INSERT INTO users (email, name, role, password_hash, must_change_password) VALUES (?, ?, ?, ?, 1)')
     .run(email.toLowerCase().trim(), name, role, bcrypt.hashSync(password, 10))
   logFromReq(req, { action: 'user.create', entityType: 'user', entityId: info.lastInsertRowid, summary: `Invited ${name} (${email}) as ${role}` })
   res.status(201).json(safe(db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)))
@@ -46,7 +46,8 @@ usersRouter.put('/:id', (req, res) => {
   if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, id)
   if (password) {
     if (String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), id)
+    // Admin-set passwords are temporary: require the user to change it on next login.
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(bcrypt.hashSync(password, 10), id)
   }
   logFromReq(req, { action: 'user.update', entityType: 'user', entityId: id, summary: `Updated ${user.email}${role && role !== user.role ? ` → ${role}` : ''}${password ? ' (password reset)' : ''}` })
   res.json(safe(db.prepare('SELECT * FROM users WHERE id = ?').get(id)))

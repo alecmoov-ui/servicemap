@@ -117,6 +117,16 @@ CREATE TABLE IF NOT EXISTS activity_log (
 CREATE INDEX IF NOT EXISTS idx_activity_at ON activity_log (at DESC);
 `)
 
+// Lightweight migrations: add columns to existing databases without recreating
+// tables (SQLite has no full migration system here). Safe to run every startup.
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all()
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+ensureColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0')
+
 export const DOC_TYPES = ['contract', 'hvac_license', 'insurance', 'schedule_a']
 
 // ---- Row <-> API shape ----------------------------------------------------

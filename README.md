@@ -49,11 +49,19 @@ first run (creating `server/data/servicemap.db`).
 | Email | Role | Can do |
 |-------|------|--------|
 | `admin@moovpool.com` | **Admin** | everything, incl. delete non-master stations |
-| `dtm@moovpool.com` | **DTM** | edit/add stations, dispatch, analytics |
-| `dispatch@moovpool.com` | **Dispatch** | dispatch + read-only on the master list |
+| `dtm@moovpool.com` | **DTM** | edit/add stations, log service events, analytics |
+| `dispatch@moovpool.com` | **Dispatch** | log service events + read-only on the master list |
 
-> Change the seed password by setting `SEED_PASSWORD` before the first run, or manage
-> real users in the `users` table. **Set a strong `JWT_SECRET` in production.**
+> Change the seed password by setting `SEED_PASSWORD` before the first run. **Set a
+> strong `JWT_SECRET` in production.**
+
+### Accounts & passwords
+- Every signed-in user can **change their own password** (header → *Password*; min 8 chars).
+- When an admin **invites a user** (or resets someone's password), that person is **forced
+  to set their own password on next login** — the temp password is single-use.
+- Sessions expire after 12h; an expired session cleanly returns you to the sign-in screen.
+- For production, sign in as the seeded admin, **change its password**, invite your real
+  team, then they each set their own on first login.
 
 ### One-process production mode
 ```bash

@@ -158,6 +158,30 @@ test('compliance: flags expired insurance, heat-pump w/o license, and clears whe
   assert.equal(ok.data.compliance.level, 'ok')
 })
 
+test('invited users must change password; self-service change works', async () => {
+  const adminToken = await tokenFor('admin@moovpool.com')
+  const created = await api('/api/users', {
+    method: 'POST', token: adminToken,
+    body: { email: 'pwtest@moovpool.com', name: 'PW Test', role: 'dispatch', password: 'temp1234' },
+  })
+  assert.equal(created.data.mustChangePassword, true)
+
+  // First login reflects the forced-change flag.
+  const login1 = await api('/api/auth/login', { method: 'POST', body: { email: 'pwtest@moovpool.com', password: 'temp1234' } })
+  assert.equal(login1.data.user.mustChangePassword, true)
+  const userToken = login1.data.token
+
+  // Wrong current password is rejected; too-short new password is rejected.
+  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: userToken, body: { currentPassword: 'wrong', newPassword: 'longenough1' } })).status, 400)
+  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: userToken, body: { currentPassword: 'temp1234', newPassword: 'short' } })).status, 400)
+
+  // Successful change clears the flag and the new password works.
+  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: userToken, body: { currentPassword: 'temp1234', newPassword: 'brandnew1234' } })).status, 200)
+  const login2 = await api('/api/auth/login', { method: 'POST', body: { email: 'pwtest@moovpool.com', password: 'brandnew1234' } })
+  assert.equal(login2.status, 200)
+  assert.equal(login2.data.user.mustChangePassword, false)
+})
+
 test('activity log: admin-only, records service-log entries', async () => {
   const adminToken = await tokenFor('admin@moovpool.com')
   const dispatchToken = await tokenFor('dispatch@moovpool.com')

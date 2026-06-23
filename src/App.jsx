@@ -8,6 +8,8 @@ import StationsPage from './pages/StationsPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 import ActivityPage from './pages/ActivityPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
+import ChangePassword from './pages/ChangePassword.jsx'
+import { useState } from 'react'
 
 export default function App() {
   const { user, authLoading } = useApp()
@@ -18,12 +20,16 @@ export default function App() {
 
   if (!user) return <LoginPage />
 
+  // Invited/admin-reset users must set their own password before using the app.
+  if (user.mustChangePassword) return <ChangePassword forced />
+
   return <Shell />
 }
 
 function Shell() {
   const { user, logout } = useApp()
   const navigate = useNavigate()
+  const [changingPw, setChangingPw] = useState(false)
 
   return (
     <div className="app">
@@ -66,6 +72,7 @@ function Shell() {
             <div className="who-name">{user.name}</div>
             <div className="who-role">{ROLES[user.role]?.label || user.role}</div>
           </div>
+          <button className="ghost small" onClick={() => setChangingPw(true)}>Password</button>
           <button className="ghost small" onClick={logout}>Sign out</button>
         </div>
       </header>
@@ -80,6 +87,8 @@ function Shell() {
           {can(user.role, 'viewAudit') && <Route path="/activity" element={<ActivityPage />} />}
         </Routes>
       </main>
+
+      {changingPw && <ChangePassword onClose={() => setChangingPw(false)} />}
     </div>
   )
 }
