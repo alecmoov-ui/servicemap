@@ -1,14 +1,21 @@
-# Render Blueprint — one-click-ish deploy with a PERSISTENT DISK so data never
-# resets. In Render: New + -> Blueprint -> connect this repo. After it deploys,
-# set APP_URL to the live URL (and EMAIL_TRANSPORT/GRAPH_* when ready for real email).
+# Render Blueprint. Currently set to the FREE tier for a quick test deploy.
+# In Render: New + -> Blueprint -> connect this repo -> it reads this file -> you
+# enter a SEED_PASSWORD (your login password) -> Create. You get a URL in a few minutes.
 #
-# Any host that runs the Dockerfile works too (Azure App Service, Fly, a VM).
+# FREE-TIER CAVEATS: the service sleeps after ~15 min idle (first load after is slow),
+# and there is NO persistent disk, so runtime data (added stations, uploads, service
+# log) resets to the seeded 37 stations on each restart/redeploy. Fine for testing.
+#
+# ---- UPGRADE TO PERSISTENT (production) ----
+# 1) change `plan: free` to `plan: starter`
+# 2) uncomment the `disk:` block and the DB_PATH/UPLOAD_DIR/BACKUP_DIR env vars
+# That keeps all data permanently across restarts/redeploys.
 
 services:
   - type: web
     name: moov-service-network
     runtime: node
-    plan: starter            # smallest always-on paid tier (free tier sleeps)
+    plan: free
     buildCommand: npm run setup && npm run build
     startCommand: npm --prefix server start
     healthCheckPath: /api/health
@@ -17,16 +24,16 @@ services:
         value: "20"
       - key: JWT_SECRET       # auto-generated strong secret, kept stable
         generateValue: true
-      - key: SEED_PASSWORD    # initial demo-account password; set your own
+      - key: SEED_PASSWORD    # you set this on first deploy; it's your login password
         sync: false
-      # Keep the database, uploaded documents, and backups on the persistent disk.
-      - key: DB_PATH
-        value: /var/data/servicemap.db
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
-      - key: BACKUP_DIR
-        value: /var/data/backups
-    disk:
-      name: data
-      mountPath: /var/data
-      sizeGB: 1
+      # --- For production persistence, switch plan to 'starter' and uncomment: ---
+      # - key: DB_PATH
+      #   value: /var/data/servicemap.db
+      # - key: UPLOAD_DIR
+      #   value: /var/data/uploads
+      # - key: BACKUP_DIR
+      #   value: /var/data/backups
+    # disk:
+    #   name: data
+    #   mountPath: /var/data
+    #   sizeGB: 1
