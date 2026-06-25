@@ -4,6 +4,7 @@ import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { complianceLabel, complianceClass, issueText } from '../lib/compliance.js'
+import LocatePreview from '../components/LocatePreview.jsx'
 
 const DOC_SLOTS = [
   { key: 'contract', label: 'Service Contract' },
@@ -340,7 +341,26 @@ function StationForm({ station, onClose }) {
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [locating, setLocating] = useState(false)
+  const [geoMsg, setGeoMsg] = useState(null)
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }))
+
+  // Turn the typed address into coordinates so the coverage circle can render.
+  async function locate() {
+    setGeoMsg(null)
+    const query = f.serviceAddress || `${f.city || ''}, ${f.state || ''}`
+    if (!query.trim()) return setGeoMsg('Enter a service address (or city/state) first.')
+    try {
+      setLocating(true)
+      const geo = await api.geocode(query)
+      setF((p) => ({ ...p, lat: geo.lat, lng: geo.lng, geocodePrecision: 'address' }))
+      setGeoMsg('✓ Located: ' + (geo.label || '').slice(0, 64))
+    } catch (e) {
+      setGeoMsg('Could not locate that address: ' + e.message)
+    } finally {
+      setLocating(false)
+    }
+  }
   const setProd = (k, v) => setF((p) => ({ ...p, products: { ...p.products, [k]: v } }))
   const togglePart = (k) => setF((p) => ({ ...p, partsCategories: p.partsCategories.includes(k) ? p.partsCategories.filter((x) => x !== k) : [...p.partsCategories, k] }))
 
@@ -391,9 +411,7 @@ function StationForm({ station, onClose }) {
           <Field label="Service address"><input value={f.serviceAddress} onChange={(e) => set('serviceAddress', e.target.value)} /></Field>
           <Field label="City"><input value={f.city} onChange={(e) => set('city', e.target.value)} /></Field>
           <Field label="State"><input value={f.state} onChange={(e) => set('state', e.target.value)} maxLength={2} /></Field>
-          <Field label="Service radius (mi)"><input type="number" value={f.serviceRadiusMi} onChange={(e) => set('serviceRadiusMi', e.target.value)} /></Field>
-          <Field label="Latitude (blank = auto)"><input value={f.lat} onChange={(e) => set('lat', e.target.value)} placeholder="auto from address" /></Field>
-          <Field label="Longitude (blank = auto)"><input value={f.lng} onChange={(e) => set('lng', e.target.value)} placeholder="auto from address" /></Field>
+          <Field label="Service radius (miles)"><input type="number" min="1" value={f.serviceRadiusMi} onChange={(e) => set('serviceRadiusMi', e.target.value)} /></Field>
           <Field label="Primary contact"><input value={f.primaryContact || ''} onChange={(e) => set('primaryContact', e.target.value)} /></Field>
           <Field label="Contact title"><input value={f.primaryContactTitle || ''} onChange={(e) => set('primaryContactTitle', e.target.value)} /></Field>
           <Field label="Phone"><input value={f.phone || ''} onChange={(e) => set('phone', e.target.value)} /></Field>
@@ -412,6 +430,21 @@ function StationForm({ station, onClose }) {
             </select>
           </Field>
         </div>
+
+        <div className="locate-row">
+          <button type="button" className="ghost" onClick={locate} disabled={locating}>
+            {locating ? 'Locating…' : '📍 Locate address & preview radius'}
+          </button>
+          {geoMsg && <span className="muted">{geoMsg}</span>}
+        </div>
+        <LocatePreview lat={parseFloat(f.lat)} lng={parseFloat(f.lng)} radiusMi={parseInt(f.serviceRadiusMi, 10) || 25} />
+        <details className="coords-details">
+          <summary>Coordinates (auto-filled from the address — only adjust if a pin lands wrong)</summary>
+          <div className="form-grid">
+            <Field label="Latitude"><input value={f.lat ?? ''} onChange={(e) => set('lat', e.target.value)} placeholder="auto from address" /></Field>
+            <Field label="Longitude"><input value={f.lng ?? ''} onChange={(e) => set('lng', e.target.value)} placeholder="auto from address" /></Field>
+          </div>
+        </details>
 
         <div className="label-row">Products qualified to service</div>
         <div className="product-grid">

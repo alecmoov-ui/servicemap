@@ -102,8 +102,10 @@ the Service Log.
 The **master station list** with the full Schedule A profile (identity, location +
 radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:
 - **Log** a service event (the manual analytics entry — see below).
-- **Edit** the profile and **upload documents**: Service Contract, Schedule A, HVAC
-  License, Proof of Insurance.
+- **Add / Edit** by **address + service radius (miles)** — click **Locate** and a live
+  map preview draws the station's coverage circle (lat/lng are auto-derived; radius is
+  per-station, e.g. 15 / 25 / 60 mi). Then **upload documents**: Service Contract,
+  Schedule A, HVAC License, Proof of Insurance.
 - **Export CSV** of all stations (data backup / Excel) and create **database snapshots**.
 
 Editing is **role-gated and enforced on the server**: Dispatch is read-only on the list

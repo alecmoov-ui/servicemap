@@ -12,9 +12,7 @@ export const FIELD_COLUMNS = [
   ['Service Address', 'serviceAddress', 'string'],
   ['City', 'city', 'string'],
   ['State', 'state', 'string'],
-  ['Lat', 'lat', 'number'],
-  ['Lng', 'lng', 'number'],
-  ['Service Radius (mi)', 'serviceRadiusMi', 'int'],
+  ['Service Radius (miles)', 'serviceRadiusMi', 'int'],
   ['Status', 'status', 'string'],
   ['Tax ID/EIN', 'taxId', 'string'],
   ['Primary Contact', 'primaryContact', 'string'],
@@ -42,6 +40,9 @@ export const FIELD_COLUMNS = [
   ['After Hours', 'afterHours', 'bool'],
   ['Preferred Contact', 'preferredContact', 'string'],
   ['Notes', 'notes', 'string'],
+  // Auto-filled from the address on import — leave blank to let the app geocode.
+  ['Lat (auto)', 'lat', 'number'],
+  ['Lng (auto)', 'lng', 'number'],
 ]
 
 // [ Header label, product key ]
