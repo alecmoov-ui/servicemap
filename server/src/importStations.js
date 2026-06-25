@@ -51,9 +51,17 @@ export const PRODUCT_COLUMNS = [
   ['Product: Salt Systems', 'saltSystems'],
   ['Product: Filters', 'filters'],
   ['Product: Lights', 'lights'],
-  ['Product: Heat Pumps', 'heatPumps'],
   ['Product: Robotic Cleaners', 'roboticCleaners'],
+  ['Product: Heat Pump - Electrical', 'heatPumpElectrical'],
+  ['Product: Heat Pump - Refrigerant', 'heatPumpRefrigerant'],
 ]
+
+// Legacy headers (older files): a single "Heat Pumps" column maps to BOTH new keys.
+// Keys are normalized (see norm()): "Product: Heat Pumps" -> "productheatpumps".
+const LEGACY_PRODUCT_ALIASES = {
+  productheatpumps: ['heatPumpElectrical', 'heatPumpRefrigerant'],
+  heatpumps: ['heatPumpElectrical', 'heatPumpRefrigerant'],
+}
 
 // Export-only, ignored on import (derived from the service log).
 export const PERF_COLUMNS = [
@@ -156,6 +164,11 @@ export function rowToPatch(rowObj) {
   let id = null
   let company = null
   for (const [header, raw] of Object.entries(rowObj)) {
+    const legacy = LEGACY_PRODUCT_ALIASES[norm(header)]
+    if (legacy) {
+      legacy.forEach((k) => (products[k] = truthy(raw)))
+      continue
+    }
     const def = HEADER_LOOKUP.get(norm(header))
     if (!def) continue
     if (def.kind === 'product') {

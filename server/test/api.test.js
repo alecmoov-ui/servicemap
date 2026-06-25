@@ -142,13 +142,20 @@ test('compliance: flags expired insurance, heat-pump w/o license, and clears whe
   assert.equal(expired.data.compliance.level, 'expired')
   assert.ok(expired.data.compliance.issues.some((i) => /Insurance expired/.test(i.message)))
 
-  // Heat-pump qualified but no HVAC license -> 'warn'
+  // Refrigerant heat-pump qualified but no HVAC license -> 'warn'
   const hp = await api('/api/stations', {
     method: 'POST', token,
-    body: { company: 'No License HVAC', city: 'Y', state: 'AZ', insuranceExpiry: '2099-01-01', products: { heatPumps: true } },
+    body: { company: 'No License HVAC', city: 'Y', state: 'AZ', insuranceExpiry: '2099-01-01', products: { heatPumpRefrigerant: true } },
   })
   assert.equal(hp.data.compliance.level, 'warn')
   assert.ok(hp.data.compliance.issues.some((i) => /HVAC license/.test(i.message)))
+
+  // Electrical-only heat-pump center does NOT require an HVAC license -> 'ok'
+  const elec = await api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'Electrical Only HP', city: 'Y2', state: 'AZ', insuranceExpiry: '2099-01-01', products: { heatPumpElectrical: true } },
+  })
+  assert.equal(elec.data.compliance.level, 'ok')
 
   // Insurance far in the future, not heat-pump, license n/a -> 'ok'
   const ok = await api('/api/stations', {
@@ -186,6 +193,7 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
   const adminToken = await tokenFor('admin@moovpool.com')
   // Lat/Lng provided so no network geocoding is needed.
   const csv = [
+    // Uses the LEGACY "Product: Heat Pumps" header to confirm it still maps to both new keys.
     'ID,Company,City,State,Lat,Lng,Service Radius (mi),Status,Product: Heat Pumps',
     ',Imported HVAC Co,Dallas,TX,32.7767,-96.797,30,active,yes',
     'st_01,Ideal Contracting LLC,Monroe,CT,41.3326,-73.2371,40,active,yes',
@@ -202,7 +210,7 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
 
   const stations = (await api('/api/stations', { token: adminToken })).data
   const created = stations.find((s) => s.company === 'Imported HVAC Co')
-  assert.ok(created && created.products.heatPumps === true)
+  assert.ok(created && created.products.heatPumpElectrical === true && created.products.heatPumpRefrigerant === true)
   assert.equal(stations.find((s) => s.id === 'st_01').serviceRadiusMi, 40)
 
   // Dispatch role cannot import.

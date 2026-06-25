@@ -31,9 +31,10 @@ export function computeCompliance(station, docTypes = new Set(), now = Date.now(
     else if (con <= SOON_DAYS) add('warn', `Contract expires in ${con} day(s)`)
   }
 
-  // Heat-pump centers must be HVAC-licensed (refrigerant work).
-  if (station.products?.heatPumps && !station.hvacLicense) {
-    add('warn', 'Heat-pump qualified but no HVAC license on file')
+  // Only REFRIGERANT heat-pump work requires an HVAC license + EPA 608.
+  // Electrical-only heat-pump centers do not.
+  if (station.products?.heatPumpRefrigerant && !station.hvacLicense) {
+    add('warn', 'Refrigerant heat-pump work qualified but no HVAC license on file')
   }
 
   // Missing agreement documents.
@@ -41,7 +42,7 @@ export function computeCompliance(station, docTypes = new Set(), now = Date.now(
   if (!docTypes.has('contract')) missing.push('Contract')
   if (!docTypes.has('schedule_a')) missing.push('Schedule A')
   if (!docTypes.has('insurance')) missing.push('Insurance COI')
-  if (station.products?.heatPumps && !docTypes.has('hvac_license')) missing.push('HVAC License')
+  if (station.products?.heatPumpRefrigerant && !docTypes.has('hvac_license')) missing.push('HVAC License')
   if (missing.length) add('info', `Missing documents: ${missing.join(', ')}`)
 
   const level = issues.some((i) => i.severity === 'expired')

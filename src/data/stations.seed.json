@@ -13,9 +13,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": true,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -52,9 +53,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": false,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -91,9 +93,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -130,9 +133,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": true,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -169,9 +173,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": true,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -208,9 +213,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -247,9 +253,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": true,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -286,9 +293,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -325,9 +333,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -364,9 +373,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": false,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -403,9 +413,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -442,9 +453,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -481,9 +493,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -520,9 +533,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -559,9 +573,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -598,9 +613,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -637,9 +653,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -676,9 +693,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": true,
       "lights": false,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -715,9 +733,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -754,9 +773,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": true,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -793,9 +813,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": true,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -832,9 +853,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -871,9 +893,10 @@
       "pumps": true,
       "saltSystems": false,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": false,
-      "filters": false
+      "filters": false,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -910,9 +933,10 @@
       "pumps": true,
       "saltSystems": false,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": false,
-      "filters": false
+      "filters": false,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -949,9 +973,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -988,9 +1013,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1027,9 +1053,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1066,9 +1093,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1105,9 +1133,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": false,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1144,9 +1173,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1183,9 +1213,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": true,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": true,
+      "heatPumpRefrigerant": true
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -1222,9 +1253,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1261,9 +1293,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1300,9 +1333,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1339,9 +1373,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": false,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1378,9 +1413,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1417,9 +1453,10 @@
       "pumps": true,
       "saltSystems": true,
       "roboticCleaners": true,
-      "heatPumps": false,
       "lights": true,
-      "filters": true
+      "filters": true,
+      "heatPumpElectrical": false,
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,

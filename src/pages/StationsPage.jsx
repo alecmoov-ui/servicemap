@@ -335,7 +335,7 @@ function StationForm({ station, onClose }) {
       hvacCertification: '', hvacLicense: '', epa608Techs: '', epa608Level: '',
       proofOfInsurance: '', insuranceCarrier: '', glLimits: '', insuranceExpiry: '',
       contractExpiry: '', effectiveDate: '', status: 'active', notes: '',
-      products: { pumps: false, saltSystems: false, roboticCleaners: false, heatPumps: false, lights: false, filters: false },
+      products: { pumps: false, saltSystems: false, roboticCleaners: false, lights: false, filters: false, heatPumpElectrical: false, heatPumpRefrigerant: false },
       partsCategories: [],
     }
   )

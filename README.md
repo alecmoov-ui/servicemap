@@ -83,6 +83,10 @@ Adding a station in the app and leaving lat/lng blank also auto-geocodes the add
 ## Features
 
 ### Map & Search (find authorized centers)
+Equipment types: Pump, Filter, Salt System, Cleaner, Light, and heat pumps split into
+**Heat Pump – Electrical** and **Heat Pump – Refrigerant** (only refrigerant work requires
+an HVAC license + EPA 608, which the compliance flags enforce).
+
 Pick an equipment type, enter the client's address (geocoded via the backend), and get
 **only** stations that service that product **and** cover the location within their
 declared radius — ranked by reliability with a star rating. The map draws service-radius

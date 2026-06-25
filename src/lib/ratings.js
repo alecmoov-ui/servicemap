@@ -1,12 +1,15 @@
 // Reliability scoring used to rank stations in the dispatch list and in analytics.
 
 export const PRODUCTS = [
-  { key: 'heatPumps', label: 'Heat Pump' },
   { key: 'pumps', label: 'Pump' },
   { key: 'filters', label: 'Filter' },
   { key: 'saltSystems', label: 'Salt System' },
   { key: 'roboticCleaners', label: 'Cleaner' },
   { key: 'lights', label: 'Light' },
+  // Heat-pump work is split: electrical fixes (most issues; no HVAC license needed)
+  // vs refrigerant fixes (require HVAC license + EPA 608 — see compliance checks).
+  { key: 'heatPumpElectrical', label: 'Heat Pump – Electrical' },
+  { key: 'heatPumpRefrigerant', label: 'Heat Pump – Refrigerant' },
 ]
 
 export function productLabel(key) {

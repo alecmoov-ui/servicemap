@@ -21,8 +21,9 @@ const DEMO_USERS = [
 ]
 
 const PRODUCT_LABEL = {
-  heatPumps: 'Heat Pump', pumps: 'Pump', filters: 'Filter',
-  saltSystems: 'Salt System', roboticCleaners: 'Cleaner', lights: 'Light',
+  pumps: 'Pump', filters: 'Filter', saltSystems: 'Salt System',
+  roboticCleaners: 'Cleaner', lights: 'Light',
+  heatPumpElectrical: 'Heat Pump – Electrical', heatPumpRefrigerant: 'Heat Pump – Refrigerant',
 }
 
 export function seedDatabase({ force = false } = {}) {

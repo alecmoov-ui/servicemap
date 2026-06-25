@@ -19,7 +19,7 @@ export default function MapPage() {
   const allStations = useStations()
   const stations = allStations.filter((s) => s.status === 'active')
 
-  const [product, setProduct] = useState('heatPumps')
+  const [product, setProduct] = useState(PRODUCTS[0].key)
   const [address, setAddress] = useState('')
   const [consumer, setConsumer] = useState(null)
   const [searching, setSearching] = useState(false)

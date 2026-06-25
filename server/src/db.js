@@ -140,6 +140,23 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0')
 
+// Split the old single `heatPumps` product flag into electrical + refrigerant.
+// Idempotent: only touches station rows that still carry the legacy key.
+{
+  const legacy = db.prepare("SELECT id, products FROM stations WHERE products LIKE '%heatPumps%'").all()
+  const upd = db.prepare('UPDATE stations SET products = ? WHERE id = ?')
+  for (const r of legacy) {
+    const p = JSON.parse(r.products || '{}')
+    if ('heatPumps' in p) {
+      const v = !!p.heatPumps
+      if (p.heatPumpElectrical === undefined) p.heatPumpElectrical = v
+      if (p.heatPumpRefrigerant === undefined) p.heatPumpRefrigerant = v
+      delete p.heatPumps
+      upd.run(JSON.stringify(p), r.id)
+    }
+  }
+}
+
 export const DOC_TYPES = ['contract', 'hvac_license', 'insurance', 'schedule_a']
 
 // ---- Row <-> API shape ----------------------------------------------------
