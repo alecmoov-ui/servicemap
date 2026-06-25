@@ -50,6 +50,11 @@ change that makes CI red.**
 6. **Documents** are stored on disk under `UPLOAD_DIR` with metadata in
    `station_documents`; downloads are auth-gated and streamed. Keep the persistent disk
    in mind for deployment.
+7. **Bulk import** (`importStations.js` + the `/stations/import` route) and **CSV export**
+   share one column spec (`FIELD_COLUMNS`/`PRODUCT_COLUMNS`) so the export round-trips as
+   the import template — keep them in sync. Every import takes a DB snapshot first
+   (`snapshot.js`) and records to `station_imports`. Match by `id` then company name; never
+   let import delete or flip `is_master`.
 
 ## When you change things
 - Touching the DB schema → also update `rowToStation`/`stationToColumns` in `db.js`,

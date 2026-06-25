@@ -111,6 +111,20 @@ Editing is **role-gated and enforced on the server**: Dispatch is read-only on t
 never deleted — the API rejects it — so the master map can't be destroyed. Adding a
 station immediately appears in Map, Zone Coverage, and Analytics.
 
+### Bulk import (Excel/CSV) & versioning
+Maintain your station list in Excel and push updates in bulk (**Stations → Import file**):
+- **Round-trip:** the **Export CSV** *is* the template (or grab a blank one). Edit/add rows
+  in Excel, then upload `.xlsx` or `.csv`.
+- **Matching:** rows match on the **`ID`** column — blank `ID` creates a new station (the
+  address is auto-geocoded); a filled `ID` updates that station. Fallback: blank `ID` with
+  an exact **Company** match updates the existing record (keep company names unique).
+- **Only the columns present in your file are touched** — omit a column to leave it alone.
+- **Versioning + rollback:** every upload (a) takes a **database snapshot first**, (b)
+  **stores the exact file** with date + who, and (c) returns a summary (created / updated /
+  errors / warnings). The **Import history** lets you re-download any prior version; roll
+  back by re-uploading it or restoring the snapshot (Backups). Imports are role-gated
+  (Admin/DTM) and audited.
+
 ### Service Log (manual analytics entry)
 Because dispatching happens in Zendesk, the team records outcomes here: one quick entry
 per resolved ticket (date, product, accepted?, completed?, days-to-complete, ticket #).

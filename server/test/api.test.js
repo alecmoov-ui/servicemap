@@ -182,6 +182,37 @@ test('invited users must change password; self-service change works', async () =
   assert.equal(login2.data.user.mustChangePassword, false)
 })
 
+test('bulk import: creates new and updates existing (matched by ID); dispatch role denied', async () => {
+  const adminToken = await tokenFor('admin@moovpool.com')
+  // Lat/Lng provided so no network geocoding is needed.
+  const csv = [
+    'ID,Company,City,State,Lat,Lng,Service Radius (mi),Status,Product: Heat Pumps',
+    ',Imported HVAC Co,Dallas,TX,32.7767,-96.797,30,active,yes',
+    'st_01,Ideal Contracting LLC,Monroe,CT,41.3326,-73.2371,40,active,yes',
+  ].join('\n')
+
+  const fd = new FormData()
+  fd.append('file', new Blob([csv], { type: 'text/csv' }), 'stations.csv')
+  const res = await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${adminToken}` }, body: fd })
+  const data = await res.json()
+  assert.equal(res.status, 200)
+  assert.equal(data.created, 1)
+  assert.equal(data.updated, 1)
+  assert.equal(data.errors.length, 0)
+
+  const stations = (await api('/api/stations', { token: adminToken })).data
+  const created = stations.find((s) => s.company === 'Imported HVAC Co')
+  assert.ok(created && created.products.heatPumps === true)
+  assert.equal(stations.find((s) => s.id === 'st_01').serviceRadiusMi, 40)
+
+  // Dispatch role cannot import.
+  const dispatchToken = await tokenFor('dispatch@moovpool.com')
+  const fd2 = new FormData()
+  fd2.append('file', new Blob([csv], { type: 'text/csv' }), 'stations.csv')
+  const denied = await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${dispatchToken}` }, body: fd2 })
+  assert.equal(denied.status, 403)
+})
+
 test('activity log: admin-only, records service-log entries', async () => {
   const adminToken = await tokenFor('admin@moovpool.com')
   const dispatchToken = await tokenFor('dispatch@moovpool.com')

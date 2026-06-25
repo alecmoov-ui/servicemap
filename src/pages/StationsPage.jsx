@@ -17,6 +17,7 @@ export default function StationsPage() {
   const [editing, setEditing] = useState(null) // station | 'new'
   const [logging, setLogging] = useState(null) // station
   const [backups, setBackups] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [busy, setBusy] = useState(false)
 
   async function exportCsv() {
@@ -37,6 +38,7 @@ export default function StationsPage() {
           <h3>Master station list <span className="muted">({stations.length})</span></h3>
           <div style={{ display: 'flex', gap: 8 }}>
             {can(role, 'exportData') && <button className="ghost" onClick={exportCsv} disabled={busy}>⬇ Export CSV</button>}
+            {can(role, 'addStations') && <button className="ghost" onClick={() => setImporting(true)}>⬆ Import file</button>}
             {can(role, 'manageUsers') && <button className="ghost" onClick={() => setBackups(true)}>Backups</button>}
             {can(role, 'addStations') ? (
               <button className="primary" onClick={() => setEditing('new')}>+ Add station</button>
@@ -89,6 +91,98 @@ export default function StationsPage() {
       {editing && <StationForm station={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {logging && <ServiceLogModal station={logging} onClose={() => setLogging(null)} />}
       {backups && <BackupsModal onClose={() => setBackups(false)} />}
+      {importing && <ImportModal onClose={() => setImporting(false)} />}
+    </div>
+  )
+}
+
+// --- Bulk import -----------------------------------------------------------
+
+function ImportModal({ onClose }) {
+  const { refresh } = useApp()
+  const [history, setHistory] = useState([])
+  const [result, setResult] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const loadHistory = () => api.getImports().then(setHistory).catch(() => {})
+  useEffect(() => { loadHistory() }, [])
+
+  async function upload(file) {
+    if (!file) return
+    setBusy(true); setError(null); setResult(null)
+    try {
+      const r = await api.importStations(file)
+      setResult(r)
+      await refresh() // new/updated stations flow into Map, Zone Coverage, Analytics
+      loadHistory()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <h3>Import stations from a file</h3>
+        <p className="muted">
+          Round-trip your list: <b>Export CSV</b> (or download a blank template), edit/add rows in Excel,
+          then upload here (<code>.xlsx</code> or <code>.csv</code>). Rows match by the <b>ID</b> column —
+          blank ID creates a new station (address is auto-located); filled ID updates it. A database
+          snapshot is taken automatically before applying, so you can roll back.
+        </p>
+
+        <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+          <button className="ghost" onClick={() => api.download('/stations/export.csv', 'moov-stations.csv')}>⬇ Export current</button>
+          <button className="ghost" onClick={() => api.download('/stations/import-template.csv', 'moov-stations-template.csv')}>⬇ Blank template</button>
+          <label className="primary upload-btn" style={{ padding: '8px 14px', borderRadius: 8 }}>
+            {busy ? 'Uploading…' : 'Choose file & upload'}
+            <input type="file" hidden accept=".csv,.xlsx" disabled={busy} onChange={(e) => upload(e.target.files[0])} />
+          </label>
+        </div>
+
+        {error && <div className="error">{error}</div>}
+
+        {result && (
+          <div className="import-result">
+            <div className="import-counts">
+              <span className="badge active">{result.created} created</span>
+              <span className="badge paused">{result.updated} updated</span>
+              {result.errors.length > 0 && <span className="badge issue">{result.errors.length} errors</span>}
+              {result.warnings.length > 0 && <span className="badge requested">{result.warnings.length} warnings</span>}
+            </div>
+            {(result.errors.length > 0 || result.warnings.length > 0) && (
+              <ul className="import-issues">
+                {result.errors.map((e, i) => <li key={'e' + i} className="err">Row {e.row}: {e.message}</li>)}
+                {result.warnings.map((w, i) => <li key={'w' + i} className="warn">Row {w.row}: {w.message}</li>)}
+              </ul>
+            )}
+            {result.snapshot && <div className="muted">Snapshot before import: <code>{result.snapshot}</code></div>}
+          </div>
+        )}
+
+        <div className="label-row">Import history ({history.length})</div>
+        <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto' }}>
+          <table className="table">
+            <thead><tr><th>File</th><th>When</th><th>By</th><th>Result</th><th></th></tr></thead>
+            <tbody>
+              {history.map((h) => (
+                <tr key={h.id}>
+                  <td style={{ fontSize: 12 }}>{h.originalName}</td>
+                  <td className="muted">{new Date(h.uploadedAt + 'Z').toLocaleString()}</td>
+                  <td className="muted">{h.uploadedBy}</td>
+                  <td style={{ fontSize: 12 }}>+{h.created} / ~{h.updated}{h.errors ? ` / !${h.errors}` : ''}</td>
+                  <td><button className="ghost small" onClick={() => api.download(`/stations/imports/${h.id}/download`, h.originalName)}>Download</button></td>
+                </tr>
+              ))}
+              {history.length === 0 && <tr><td colSpan={5} className="muted" style={{ padding: 12 }}>No imports yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="muted" style={{ marginTop: 8 }}>
+          To roll back, download a previous version and re-upload it, or restore the snapshot (Backups).
+        </p>
+        <div className="modal-actions">
+          <button className="ghost" onClick={onClose}>Done</button>
+        </div>
+      </div>
     </div>
   )
 }

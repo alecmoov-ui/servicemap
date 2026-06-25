@@ -115,6 +115,19 @@ CREATE TABLE IF NOT EXISTS activity_log (
   summary     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_activity_at ON activity_log (at DESC);
+
+-- Bulk-import history: each uploaded station file (for versioning + rollback).
+CREATE TABLE IF NOT EXISTS station_imports (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename      TEXT NOT NULL,      -- stored filename on disk
+  original_name TEXT,
+  created_count INTEGER DEFAULT 0,
+  updated_count INTEGER DEFAULT 0,
+  error_count   INTEGER DEFAULT 0,
+  snapshot_name TEXT,               -- DB snapshot taken just before applying
+  uploaded_by   TEXT,
+  uploaded_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `)
 
 // Lightweight migrations: add columns to existing databases without recreating

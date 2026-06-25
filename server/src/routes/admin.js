@@ -3,18 +3,14 @@
 // gives you data rollback points. Restoring is an ops step (see README).
 
 import { Router } from 'express'
-import { mkdirSync, readdirSync, statSync, createReadStream, existsSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
-import { db } from '../db.js'
+import { readdirSync, statSync, createReadStream, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { requireAuth, requirePermission } from '../auth.js'
 import { logFromReq } from '../activity.js'
+import { createSnapshot, BACKUP_DIR } from '../snapshot.js'
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requirePermission('manageUsers'))
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const BACKUP_DIR = process.env.BACKUP_DIR || join(__dirname, '..', '..', 'data', 'backups')
 
 function listSnapshots() {
   if (!existsSync(BACKUP_DIR)) return []
@@ -27,9 +23,7 @@ function listSnapshots() {
 adminRouter.get('/snapshots', (req, res) => res.json(listSnapshots()))
 
 adminRouter.post('/snapshot', async (req, res) => {
-  mkdirSync(BACKUP_DIR, { recursive: true })
-  const name = `servicemap-${new Date().toISOString().replace(/[:.]/g, '-')}.db`
-  await db.backup(join(BACKUP_DIR, name))
+  const name = await createSnapshot()
   logFromReq(req, { action: 'data.snapshot', entityType: 'session', summary: `Created backup snapshot ${name}` })
   res.status(201).json({ name })
 })

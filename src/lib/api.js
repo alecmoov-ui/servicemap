@@ -81,6 +81,20 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 
+  // Bulk import (Excel/CSV)
+  getImports: () => request('/stations/imports'),
+  async importStations(file) {
+    const fd = new FormData()
+    fd.append('file', file)
+    const headers = {}
+    if (getToken()) headers.Authorization = `Bearer ${getToken()}`
+    const res = await fetch('/api/stations/import', { method: 'POST', headers, body: fd })
+    const data = await res.json().catch(() => ({}))
+    // 200 = applied (maybe with row errors); 422 = nothing applied — both carry a summary.
+    if (res.status === 200 || res.status === 422) return data
+    throw new Error(data.error || 'Import failed')
+  },
+
   // Data protection
   getSnapshots: () => request('/admin/snapshots'),
   createSnapshot: () => request('/admin/snapshot', { method: 'POST' }),
