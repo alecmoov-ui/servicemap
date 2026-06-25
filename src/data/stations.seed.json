@@ -16,7 +16,7 @@
       "lights": true,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -136,7 +136,7 @@
       "lights": true,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -176,7 +176,7 @@
       "lights": true,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -256,7 +256,7 @@
       "lights": true,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -696,7 +696,7 @@
       "lights": false,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -776,7 +776,7 @@
       "lights": true,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",
@@ -816,7 +816,7 @@
       "lights": true,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": null,
     "proofOfInsurance": null,
@@ -1216,7 +1216,7 @@
       "lights": true,
       "filters": true,
       "heatPumpElectrical": true,
-      "heatPumpRefrigerant": true
+      "heatPumpRefrigerant": false
     },
     "hvacCertification": "On file",
     "proofOfInsurance": "On file",

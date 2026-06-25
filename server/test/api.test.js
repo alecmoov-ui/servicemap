@@ -209,8 +209,10 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
   assert.equal(data.errors.length, 0)
 
   const stations = (await api('/api/stations', { token: adminToken })).data
+  // Legacy "Heat Pumps" column maps to electrical only (refrigerant must be explicit).
   const created = stations.find((s) => s.company === 'Imported HVAC Co')
-  assert.ok(created && created.products.heatPumpElectrical === true && created.products.heatPumpRefrigerant === true)
+  assert.ok(created && created.products.heatPumpElectrical === true)
+  assert.ok(!created.products.heatPumpRefrigerant)
   assert.equal(stations.find((s) => s.id === 'st_01').serviceRadiusMi, 40)
 
   // Dispatch role cannot import.

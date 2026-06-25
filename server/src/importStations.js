@@ -56,11 +56,12 @@ export const PRODUCT_COLUMNS = [
   ['Product: Heat Pump - Refrigerant', 'heatPumpRefrigerant'],
 ]
 
-// Legacy headers (older files): a single "Heat Pumps" column maps to BOTH new keys.
-// Keys are normalized (see norm()): "Product: Heat Pumps" -> "productheatpumps".
+// Legacy headers (older files): a single "Heat Pumps" column maps to ELECTRICAL only
+// (conservative — refrigerant requires an HVAC license, so confirm it via the explicit
+// "Heat Pump - Refrigerant" column). Keys are normalized (see norm()).
 const LEGACY_PRODUCT_ALIASES = {
-  productheatpumps: ['heatPumpElectrical', 'heatPumpRefrigerant'],
-  heatpumps: ['heatPumpElectrical', 'heatPumpRefrigerant'],
+  productheatpumps: ['heatPumpElectrical'],
+  heatpumps: ['heatPumpElectrical'],
 }
 
 // Export-only, ignored on import (derived from the service log).

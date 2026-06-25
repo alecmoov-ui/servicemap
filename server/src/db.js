@@ -149,8 +149,10 @@ ensureColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0')
     const p = JSON.parse(r.products || '{}')
     if ('heatPumps' in p) {
       const v = !!p.heatPumps
+      // Conservative: legacy "heat pumps" => electrical-only. Refrigerant must be
+      // confirmed explicitly (it requires an HVAC license + EPA 608).
       if (p.heatPumpElectrical === undefined) p.heatPumpElectrical = v
-      if (p.heatPumpRefrigerant === undefined) p.heatPumpRefrigerant = v
+      if (p.heatPumpRefrigerant === undefined) p.heatPumpRefrigerant = false
       delete p.heatPumps
       upd.run(JSON.stringify(p), r.id)
     }
