@@ -9,6 +9,7 @@
     "dev": "node --watch src/index.js",
     "seed": "node src/seed.js --force",
     "backup": "node scripts/backup.js",
+    "template": "node scripts/make-upload-template.mjs",
     "test": "node --test"
   },
   "dependencies": {
