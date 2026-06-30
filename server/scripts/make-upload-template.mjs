@@ -34,21 +34,47 @@ ws.addRow(HEADER)
 ws.getRow(1).font = { bold: true }
 ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF1FE' } }
 
-// Example lead row (clearly marked) so they see how to add a new station.
-const example = {
-  company: 'Example Lead — delete this row',
-  serviceAddress: '123 Main St',
-  city: 'Tampa',
-  state: 'FL',
-  serviceRadiusMi: 30,
-  status: 'prospect',
-  primaryContact: 'Jane Doe',
-  phone: '555-123-4567',
-  email: 'jane@example.com',
-  products: { pumps: true, heatPumpElectrical: true },
-}
-const exRow = ws.addRow(rowFor(example))
-exRow.font = { italic: true, color: { argb: 'FF8A5A1A' } }
+// Example lead rows (clearly marked) showing common scenarios. ID is blank = new.
+// Real cities so they geocode on import; delete or edit before going live.
+const examples = [
+  {
+    // Electrical-only pool company (no HVAC license needed).
+    company: 'EXAMPLE — Sunshine Pool Repair (delete)',
+    serviceAddress: '5600 S Orange Ave, Orlando, FL 32809',
+    city: 'Orlando', state: 'FL', serviceRadiusMi: 30, status: 'prospect',
+    primaryContact: 'Maria Lopez', primaryContactTitle: 'Owner',
+    phone: '407-555-0142', email: 'maria@sunshinepoolrepair.com',
+    serviceType: 'On the road', holdsInventory: 'No', totalTechnicians: 3,
+    preferredContact: 'phone', notes: 'Lead from distributor referral; vetting in progress',
+    products: { pumps: true, filters: true, saltSystems: true, heatPumpElectrical: true },
+  },
+  {
+    // HVAC-licensed company that does refrigerant heat-pump work.
+    company: 'EXAMPLE — Desert HVAC & Pools (delete)',
+    serviceAddress: '2120 W Camelback Rd, Phoenix, AZ 85015',
+    city: 'Phoenix', state: 'AZ', serviceRadiusMi: 45, status: 'prospect',
+    primaryContact: 'Sam Carter', primaryContactTitle: 'Service Manager',
+    phone: '602-555-0190', email: 'sam@deserthvacpools.com',
+    serviceType: 'Both (fixed + road)', holdsInventory: 'Yes', totalTechnicians: 8,
+    hvacLicense: 'AZ-ROC-998877 (AZ)', epa608Techs: 4, epa608Level: 'Universal',
+    insuranceCarrier: 'Acme Mutual', glLimits: '$1M / $2M', insuranceExpiry: '2027-03-31',
+    preferredContact: 'email',
+    products: { pumps: true, filters: true, heatPumpElectrical: true, heatPumpRefrigerant: true },
+  },
+  {
+    // Single-product specialist.
+    company: 'EXAMPLE — Gulf Coast Pump Co (delete)',
+    serviceAddress: '4100 W Kennedy Blvd, Tampa, FL 33609',
+    city: 'Tampa', state: 'FL', serviceRadiusMi: 20, status: 'prospect',
+    primaryContact: 'Dee Nguyen', phone: '813-555-0173', email: 'dee@gulfcoastpump.com',
+    serviceType: 'On the road', holdsInventory: 'No', totalTechnicians: 2,
+    products: { pumps: true },
+  },
+]
+examples.forEach((ex) => {
+  const r = ws.addRow(rowFor(ex))
+  r.font = { italic: true, color: { argb: 'FF8A5A1A' } }
+})
 
 // The current roster (with IDs).
 seed.forEach((s) => ws.addRow(rowFor(s)))
