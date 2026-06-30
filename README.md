@@ -91,6 +91,8 @@ Pick an equipment type, enter the client's address (geocoded via the backend), a
 **only** stations that service that product **and** cover the location within their
 declared radius — ranked by reliability with a star rating. The map draws service-radius
 zone circles and shows each center's contact details to route the dispatch in Zendesk.
+A **"Show all … coverage"** toggle overlays every station's radius for the selected
+product (no search needed), so you can watch coverage build as you add stations.
 
 ### Zone Coverage
 A second map showing **coverage density** (overlapping radii shade darker) and **gap

@@ -32,11 +32,15 @@ function FitBounds({ points }) {
   return null
 }
 
-export default function MapView({ stations, matches, consumer, selectedId, onSelect }) {
+export default function MapView({ stations, matches, consumer, selectedId, onSelect, coverageProduct }) {
   const matchIds = new Set(matches.map((m) => m.id))
+  // Stations whose coverage circle should be drawn even without a search.
+  const coversProduct = (s) => coverageProduct && s.products?.[coverageProduct]
   const focusPoints = consumer
     ? [consumer, ...matches]
-    : stations.map((s) => ({ lat: s.lat, lng: s.lng }))
+    : coverageProduct
+      ? stations.filter(coversProduct).map((s) => ({ lat: s.lat, lng: s.lng }))
+      : stations.map((s) => ({ lat: s.lat, lng: s.lng }))
 
   return (
     <MapContainer center={[39.5, -98.35]} zoom={4} className="map" scrollWheelZoom>
@@ -49,17 +53,20 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
       {stations.map((s) => {
         const isMatch = matchIds.has(s.id)
         const isSel = s.id === selectedId
+        const showCircle = isMatch || coversProduct(s)
         return (
           <div key={s.id}>
-            {isMatch && (
+            {showCircle && (
               <Circle
                 center={[s.lat, s.lng]}
                 radius={s.serviceRadiusMi * 1609.34}
-                pathOptions={{
-                  color: isSel ? '#e0701a' : '#1f9d55',
-                  weight: 1,
-                  fillOpacity: isSel ? 0.12 : 0.06,
-                }}
+                pathOptions={
+                  isSel
+                    ? { color: '#e0701a', weight: 1, fillOpacity: 0.12 }
+                    : isMatch
+                      ? { color: '#1f9d55', weight: 1, fillOpacity: 0.06 }
+                      : { color: '#2d6cdf', weight: 1, fillColor: '#2d6cdf', fillOpacity: 0.05 } // coverage overlay
+                }
               />
             )}
             <Marker

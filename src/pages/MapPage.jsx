@@ -25,6 +25,13 @@ export default function MapPage() {
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
+  const [showCoverage, setShowCoverage] = useState(false)
+
+  // Stations whose coverage circles overlay the map (the selected product's network).
+  const coverageCount = useMemo(
+    () => (showCoverage ? stations.filter((s) => s.products?.[product]).length : 0),
+    [showCoverage, stations, product]
+  )
 
   // Stations that service the chosen product AND cover the consumer location,
   // ranked by reliability. No false positives: product + range are hard filters.
@@ -103,6 +110,14 @@ export default function MapPage() {
               </button>
             ))}
           </div>
+
+          <label className="coverage-toggle">
+            <input type="checkbox" checked={showCoverage} onChange={(e) => setShowCoverage(e.target.checked)} />
+            <span>
+              Show all <b>{PRODUCTS.find((p) => p.key === product).label}</b> coverage on the map
+              {showCoverage ? ` (${coverageCount} station${coverageCount !== 1 ? 's' : ''})` : ''}
+            </span>
+          </label>
         </div>
 
         <div className="results">
@@ -183,6 +198,7 @@ export default function MapPage() {
           consumer={consumer}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          coverageProduct={showCoverage ? product : null}
         />
       </div>
     </div>
