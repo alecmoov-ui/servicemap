@@ -16,8 +16,10 @@ function Fit({ lat, lng, radiusMi }) {
   useEffect(() => {
     setTimeout(() => map.invalidateSize(), 0)
     if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) return
-    const circle = L.circle([lat, lng], { radius: (radiusMi || 25) * 1609.34 })
-    map.fitBounds(circle.getBounds(), { padding: [20, 20] })
+    // Bounds sized to the radius, computed from the point (no map-attached circle
+    // needed — circle.getBounds() would throw here because it isn't on the map yet).
+    const bounds = L.latLng(lat, lng).toBounds((radiusMi || 25) * 1609.34 * 2)
+    map.fitBounds(bounds, { padding: [20, 20] })
   }, [lat, lng, radiusMi, map])
   return null
 }
