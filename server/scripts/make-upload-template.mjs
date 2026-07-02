@@ -46,7 +46,7 @@ const examples = [
     // Electrical-only pool company (no HVAC license needed).
     company: 'EXAMPLE — Sunshine Pool Repair (delete)',
     serviceAddress: '5600 S Orange Ave, Orlando, FL 32809',
-    city: 'Orlando', state: 'FL', serviceRadiusMi: 30, status: 'prospect',
+    city: 'Orlando', state: 'FL', zip: '32809', serviceRadiusMi: 30, status: 'prospect',
     primaryContact: 'Maria Lopez', primaryContactTitle: 'Owner',
     phone: '407-555-0142', email: 'maria@sunshinepoolrepair.com',
     serviceType: 'On the road', holdsInventory: 'No', totalTechnicians: 3,
@@ -57,7 +57,7 @@ const examples = [
     // HVAC-licensed company that does refrigerant heat-pump work.
     company: 'EXAMPLE — Desert HVAC & Pools (delete)',
     serviceAddress: '2120 W Camelback Rd, Phoenix, AZ 85015',
-    city: 'Phoenix', state: 'AZ', serviceRadiusMi: 45, status: 'prospect',
+    city: 'Phoenix', state: 'AZ', zip: '85015', serviceRadiusMi: 45, status: 'prospect',
     primaryContact: 'Sam Carter', primaryContactTitle: 'Service Manager',
     phone: '602-555-0190', email: 'sam@deserthvacpools.com',
     serviceType: 'Both (fixed + road)', holdsInventory: 'Yes', totalTechnicians: 8,
@@ -74,7 +74,7 @@ const examples = [
     // Single-product specialist.
     company: 'EXAMPLE — Gulf Coast Pump Co (delete)',
     serviceAddress: '4100 W Kennedy Blvd, Tampa, FL 33609',
-    city: 'Tampa', state: 'FL', serviceRadiusMi: 20, status: 'prospect',
+    city: 'Tampa', state: 'FL', zip: '33609', serviceRadiusMi: 20, status: 'prospect',
     primaryContact: 'Dee Nguyen', phone: '813-555-0173', email: 'dee@gulfcoastpump.com',
     serviceType: 'On the road', holdsInventory: 'No', totalTechnicians: 2,
     products: { pumps: true },
@@ -110,6 +110,7 @@ const G = [
   ['Service Address', 'Recommended', 'Street they dispatch from', '4760 N. Wind Blvd, Kissimmee, FL 34746'],
   ['City', 'Recommended', 'City', 'Kissimmee'],
   ['State', 'Recommended', '2-letter state', 'FL'],
+  ['Zip', 'Recommended', 'ZIP code (improves auto-location accuracy)', '34746'],
   ['Service Radius (miles)', 'YES', 'Coverage radius in miles', '15, 25, 60'],
   ['Status', 'YES', 'Lifecycle (leads = prospect; prospects are hidden from Map/Coverage)', 'active | paused | prospect'],
   ['Tax ID/EIN', 'No', 'Tax ID', '12-3456789'],

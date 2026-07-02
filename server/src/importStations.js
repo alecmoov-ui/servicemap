@@ -12,6 +12,7 @@ export const FIELD_COLUMNS = [
   ['Service Address', 'serviceAddress', 'string'],
   ['City', 'city', 'string'],
   ['State', 'state', 'string'],
+  ['Zip', 'zip', 'string'],
   ['Service Radius (miles)', 'serviceRadiusMi', 'int'],
   ['Status', 'status', 'string'],
   ['Tax ID/EIN', 'taxId', 'string'],

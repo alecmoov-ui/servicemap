@@ -329,7 +329,7 @@ function StationForm({ station, onClose }) {
   const isNew = !station
   const [f, setF] = useState(
     station || {
-      company: '', serviceAddress: '', city: '', state: '', lat: '', lng: '', serviceRadiusMi: 25,
+      company: '', serviceAddress: '', city: '', state: '', zip: '', lat: '', lng: '', serviceRadiusMi: 25,
       taxId: '', primaryContact: '', primaryContactTitle: '', phone: '', email: '', billingAddress: '', shippingAddress: '',
       serviceType: 'On the road', holdsInventory: 'Yes', totalTechnicians: '',
       hvacCertification: '', hvacLicense: '', epa608Techs: '', epa608Level: '',
@@ -353,11 +353,14 @@ function StationForm({ station, onClose }) {
   })
   const removeContact = (i) => setF((p) => ({ ...p, contacts: (p.contacts || []).filter((_, j) => j !== i) }))
 
+  // Build the best geocoding query from the address parts (incl. zip).
+  const geoQuery = () => [f.serviceAddress, f.city, f.state, f.zip].filter(Boolean).join(', ')
+
   // Turn the typed address into coordinates so the coverage circle can render.
   async function locate() {
     setGeoMsg(null)
-    const query = f.serviceAddress || `${f.city || ''}, ${f.state || ''}`
-    if (!query.trim()) return setGeoMsg('Enter a service address (or city/state) first.')
+    const query = geoQuery()
+    if (!query.trim()) return setGeoMsg('Enter a service address, or city/state/zip, first.')
     try {
       setLocating(true)
       const geo = await api.geocode(query)
@@ -378,7 +381,7 @@ function StationForm({ station, onClose }) {
     let lng = parseFloat(f.lng)
     let precision = f.geocodePrecision || 'address'
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      const query = f.serviceAddress || `${f.city}, ${f.state}`
+      const query = geoQuery()
       if (!query.trim()) return setError('Enter a service address (or lat/lng) so we can place the pin.')
       try {
         setSaving(true)
@@ -420,6 +423,7 @@ function StationForm({ station, onClose }) {
           <Field label="Service address"><input value={f.serviceAddress} onChange={(e) => set('serviceAddress', e.target.value)} /></Field>
           <Field label="City"><input value={f.city} onChange={(e) => set('city', e.target.value)} /></Field>
           <Field label="State"><input value={f.state} onChange={(e) => set('state', e.target.value)} maxLength={2} /></Field>
+          <Field label="Zip code"><input value={f.zip || ''} onChange={(e) => set('zip', e.target.value)} placeholder="e.g. 33809" /></Field>
           <Field label="Service radius (miles)"><input type="number" min="1" value={f.serviceRadiusMi} onChange={(e) => set('serviceRadiusMi', e.target.value)} /></Field>
           <Field label="Primary contact"><input value={f.primaryContact || ''} onChange={(e) => set('primaryContact', e.target.value)} /></Field>
           <Field label="Contact title"><input value={f.primaryContactTitle || ''} onChange={(e) => set('primaryContactTitle', e.target.value)} /></Field>

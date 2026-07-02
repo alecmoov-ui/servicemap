@@ -140,6 +140,7 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('stations', 'contacts', "TEXT NOT NULL DEFAULT '[]'") // extra named contacts (JSON)
+ensureColumn('stations', 'zip', 'TEXT')
 
 // Split the old single `heatPumps` product flag into electrical + refrigerant.
 // Idempotent: only touches station rows that still carry the legacy key.
@@ -174,6 +175,7 @@ export function rowToStation(r, perf) {
     serviceAddress: r.service_address,
     city: r.city,
     state: r.state,
+    zip: r.zip,
     lat: r.lat,
     lng: r.lng,
     geocodePrecision: r.geocode_precision,
@@ -216,7 +218,7 @@ export function rowToStation(r, perf) {
 export function stationToColumns(s) {
   const c = {}
   const map = {
-    company: 'company', serviceAddress: 'service_address', city: 'city', state: 'state',
+    company: 'company', serviceAddress: 'service_address', city: 'city', state: 'state', zip: 'zip',
     lat: 'lat', lng: 'lng', geocodePrecision: 'geocode_precision', serviceRadiusMi: 'service_radius_mi',
     taxId: 'tax_id', primaryContact: 'primary_contact', primaryContactTitle: 'primary_contact_title',
     phone: 'phone', email: 'email', billingAddress: 'billing_address', shippingAddress: 'shipping_address',

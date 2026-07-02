@@ -158,8 +158,12 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
       let lat = merged.lat !== undefined ? merged.lat : existing?.lat
       let lng = merged.lng !== undefined ? merged.lng : existing?.lng
       if ((lat == null || lng == null) && geocodes < 60) {
-        const q = [merged.serviceAddress ?? existing?.service_address, merged.city ?? existing?.city, merged.state ?? existing?.state]
-          .filter(Boolean).join(', ')
+        const q = [
+          merged.serviceAddress ?? existing?.service_address,
+          merged.city ?? existing?.city,
+          merged.state ?? existing?.state,
+          merged.zip ?? existing?.zip,
+        ].filter(Boolean).join(', ')
         if (q) {
           geocodes++
           const geo = await geocodeOne(q)
