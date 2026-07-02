@@ -1,39 +1,39 @@
-# Render Blueprint. Currently set to the FREE tier for a quick test deploy.
-# In Render: New + -> Blueprint -> connect this repo -> it reads this file -> you
-# enter a SEED_PASSWORD (your login password) -> Create. You get a URL in a few minutes.
+# Render Blueprint — PRODUCTION spec: always-on Starter instance + a persistent
+# disk so data (stations, documents, service log, backups) never resets.
 #
-# FREE-TIER CAVEATS: the service sleeps after ~15 min idle (first load after is slow),
-# and there is NO persistent disk, so runtime data (added stations, uploads, service
-# log) resets to the seeded 37 stations on each restart/redeploy. Fine for testing.
+# Deploy: Render -> New + -> Blueprint -> connect this repo -> it reads this file.
+# You'll be asked for SEED_PASSWORD (your first login password). Starter + disk
+# require a payment method (~$7/mo instance + ~$0.25/GB-mo disk).
 #
-# ---- UPGRADE TO PERSISTENT (production) ----
-# 1) change `plan: free` to `plan: starter`
-# 2) uncomment the `disk:` block and the DB_PATH/UPLOAD_DIR/BACKUP_DIR env vars
-# That keeps all data permanently across restarts/redeploys.
+# To run a free trial instead (data resets on sleep): set `plan: free` and remove
+# the `disk:` block and the DB_PATH/UPLOAD_DIR/BACKUP_DIR vars.
 
 services:
   - type: web
     name: moov-service-network
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npm run setup && npm run build
     startCommand: npm --prefix server start
     healthCheckPath: /api/health
+    autoDeploy: true            # redeploys automatically when you push to the branch
     envVars:
       - key: NODE_VERSION
         value: "20"
-      - key: JWT_SECRET       # auto-generated strong secret, kept stable
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET          # auto-generated strong secret, kept stable
         generateValue: true
-      - key: SEED_PASSWORD    # you set this on first deploy; it's your login password
+      - key: SEED_PASSWORD       # your initial login password (set on first deploy)
         sync: false
-      # --- For production persistence, switch plan to 'starter' and uncomment: ---
-      # - key: DB_PATH
-      #   value: /var/data/servicemap.db
-      # - key: UPLOAD_DIR
-      #   value: /var/data/uploads
-      # - key: BACKUP_DIR
-      #   value: /var/data/backups
-    # disk:
-    #   name: data
-    #   mountPath: /var/data
-    #   sizeGB: 1
+      # Keep the database, uploaded documents, and backups on the persistent disk.
+      - key: DB_PATH
+        value: /var/data/servicemap.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: BACKUP_DIR
+        value: /var/data/backups
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1

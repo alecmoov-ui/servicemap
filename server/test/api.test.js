@@ -17,6 +17,7 @@ before(async () => {
   process.env.UPLOAD_DIR = join(tmpDir, 'uploads')
   process.env.BACKUP_DIR = join(tmpDir, 'backups')
   process.env.JWT_SECRET = 'test-secret'
+  process.env.DISABLE_RATE_LIMIT = 'true'
   const { buildApp } = await import('../src/app.js')
   const app = buildApp()
   await new Promise((resolve) => {

@@ -3,6 +3,8 @@
 
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
@@ -21,10 +23,25 @@ export function buildApp({ seed = true } = {}) {
   if (seed) seedDatabase() // seeds 37 stations + demo users + demo service log on first run
 
   const app = express()
+  app.set('trust proxy', 1) // behind Render/other proxies — needed for correct client IPs
+  // Security headers. CSP is disabled because the map loads OpenStreetMap tiles and
+  // geocoding cross-origin; the app is login-gated and served same-origin otherwise.
+  app.use(helmet({ contentSecurityPolicy: false }))
   app.use(cors())
   app.use(express.json())
 
+  // Throttle sign-in attempts (brute-force protection). Skipped in tests.
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => process.env.DISABLE_RATE_LIMIT === 'true',
+    message: { error: 'Too many sign-in attempts. Please wait a few minutes and try again.' },
+  })
+
   app.get('/api/health', (req, res) => res.json({ ok: true }))
+  app.use('/api/auth/login', loginLimiter)
   app.use('/api/auth', authRouter)
   app.use('/api/stations', stationsRouter)
   app.use('/api/geocode', geocodeRouter)
