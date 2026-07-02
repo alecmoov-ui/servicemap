@@ -139,6 +139,7 @@ function ensureColumn(table, column, definition) {
   }
 }
 ensureColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('stations', 'contacts', "TEXT NOT NULL DEFAULT '[]'") // extra named contacts (JSON)
 
 // Split the old single `heatPumps` product flag into electrical + refrigerant.
 // Idempotent: only touches station rows that still carry the legacy key.
@@ -181,6 +182,7 @@ export function rowToStation(r, perf) {
     taxId: r.tax_id,
     primaryContact: r.primary_contact,
     primaryContactTitle: r.primary_contact_title,
+    contacts: JSON.parse(r.contacts || '[]'),
     phone: r.phone,
     email: r.email,
     billingAddress: r.billing_address,
@@ -227,6 +229,7 @@ export function stationToColumns(s) {
   for (const [k, col] of Object.entries(map)) if (s[k] !== undefined) c[col] = s[k]
   if (s.products !== undefined) c.products = JSON.stringify(s.products)
   if (s.partsCategories !== undefined) c.parts_categories = JSON.stringify(s.partsCategories)
+  if (s.contacts !== undefined) c.contacts = JSON.stringify(s.contacts)
   if (s.contractOnFile !== undefined) c.contract_on_file = s.contractOnFile ? 1 : 0
   if (s.w9OnFile !== undefined) c.w9_on_file = s.w9OnFile ? 1 : 0
   if (s.afterHours !== undefined) c.after_hours = s.afterHours ? 1 : 0

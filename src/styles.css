@@ -211,6 +211,9 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 1
 .coords-details { margin-top: 10px; }
 .coords-details summary { font-size: 12px; color: var(--muted); cursor: pointer; }
 .coords-details .form-grid { margin-top: 8px; }
+.contacts-list { display: flex; flex-direction: column; gap: 6px; }
+.contact-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1.4fr auto; gap: 6px; align-items: center; }
+.contact-row input { padding: 6px 8px; }
 .master-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .lock { color: var(--muted); font-size: 12.5px; }
 .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }

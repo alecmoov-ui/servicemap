@@ -7,13 +7,17 @@ import ExcelJS from 'exceljs'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { FIELD_COLUMNS, PRODUCT_COLUMNS } from '../src/importStations.js'
+import { FIELD_COLUMNS, CONTACT_COLUMNS, PRODUCT_COLUMNS } from '../src/importStations.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const out = process.argv[2] || join(__dirname, '..', '..', 'Moov-Stations-Upload-Template.xlsx')
 const seed = JSON.parse(readFileSync(join(__dirname, '..', '..', 'src', 'data', 'stations.seed.json'), 'utf8'))
 
-const HEADER = [...FIELD_COLUMNS.map((c) => c[0]), ...PRODUCT_COLUMNS.map((c) => c[0])]
+const HEADER = [
+  ...FIELD_COLUMNS.map((c) => c[0]),
+  ...CONTACT_COLUMNS.map((c) => c.label),
+  ...PRODUCT_COLUMNS.map((c) => c[0]),
+]
 
 function rowFor(s) {
   const fields = FIELD_COLUMNS.map(([, field]) => {
@@ -22,8 +26,9 @@ function rowFor(s) {
     if (typeof v === 'boolean') return v ? 'yes' : 'no'
     return v == null ? '' : v
   })
+  const contacts = CONTACT_COLUMNS.map((c) => s.contacts?.[c.idx]?.[c.field] || '')
   const products = PRODUCT_COLUMNS.map(([, key]) => (s.products?.[key] ? 'yes' : ''))
-  return [...fields, ...products]
+  return [...fields, ...contacts, ...products]
 }
 
 const wb = new ExcelJS.Workbook()
@@ -59,6 +64,10 @@ const examples = [
     hvacLicense: 'AZ-ROC-998877 (AZ)', epa608Techs: 4, epa608Level: 'Universal',
     insuranceCarrier: 'Acme Mutual', glLimits: '$1M / $2M', insuranceExpiry: '2027-03-31',
     preferredContact: 'email',
+    contacts: [
+      { name: 'Rosa Kim', title: 'Dispatch', phone: '602-555-0191', email: 'dispatch@deserthvacpools.com' },
+      { name: 'Tom Reyes', title: 'Billing', phone: '602-555-0192', email: 'billing@deserthvacpools.com' },
+    ],
     products: { pumps: true, filters: true, heatPumpElectrical: true, heatPumpRefrigerant: true },
   },
   {
@@ -106,6 +115,8 @@ const G = [
   ['Tax ID/EIN', 'No', 'Tax ID', '12-3456789'],
   ['Primary Contact', 'No', 'Main contact name', 'Jane Doe'],
   ['Contact Title', 'No', 'Their title', 'Owner'],
+  ['Contact 2 Name / Title / Phone / Email', 'No', 'A second person to address (e.g. dispatch)', 'Rosa Kim / Dispatch / 602-555-0191 / rosa@...'],
+  ['Contact 3 Name / Title / Phone / Email', 'No', 'A third person (e.g. billing). Add more in the app.', 'Tom Reyes / Billing / ...'],
   ['Phone', 'No', 'Phone', '555-123-4567'],
   ['Email', 'No', 'Email', 'jane@example.com'],
   ['Billing Address', 'No', 'Billing address', '...'],

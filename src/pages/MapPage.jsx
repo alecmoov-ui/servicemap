@@ -174,9 +174,15 @@ export default function MapPage() {
                 </div>
                 {selectedId === s.id && (
                   <div className="card-expand">
-                    <div className="kv"><span>Contact</span><b>{s.primaryContact || '—'}</b></div>
+                    <div className="kv"><span>Contact</span><b>{s.primaryContact || '—'}{s.primaryContactTitle ? ` (${s.primaryContactTitle})` : ''}</b></div>
                     <div className="kv"><span>Phone</span><b>{s.phone || '—'}</b></div>
                     <div className="kv"><span>Email</span><b>{s.email || '—'}</b></div>
+                    {(s.contacts || []).map((c, i) => (
+                      <div className="kv" key={i}>
+                        <span>{c.title || 'Contact'}</span>
+                        <b>{[c.name, c.phone, c.email].filter(Boolean).join(' · ') || '—'}</b>
+                      </div>
+                    ))}
                     <div className="kv"><span>Radius</span><b>{s.serviceRadiusMi} mi</b></div>
                     <div className="kv"><span>Insurance</span><b>{s.proofOfInsurance || (s.insuranceCarrier ? s.insuranceCarrier : 'Not on file')}</b></div>
                     <div className="kv"><span>HVAC license</span><b>{s.hvacLicense || s.hvacCertification || '—'}</b></div>

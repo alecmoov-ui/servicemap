@@ -193,10 +193,10 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
   const adminToken = await tokenFor('admin@moovpool.com')
   // Lat/Lng provided so no network geocoding is needed.
   const csv = [
-    // Uses the LEGACY "Product: Heat Pumps" header to confirm it still maps to both new keys.
-    'ID,Company,City,State,Lat,Lng,Service Radius (mi),Status,Product: Heat Pumps',
-    ',Imported HVAC Co,Dallas,TX,32.7767,-96.797,30,active,yes',
-    'st_01,Ideal Contracting LLC,Monroe,CT,41.3326,-73.2371,40,active,yes',
+    // Uses the LEGACY "Product: Heat Pumps" header (maps to electrical) + an extra contact.
+    'ID,Company,City,State,Lat,Lng,Service Radius (mi),Status,Contact 2 Name,Contact 2 Title,Product: Heat Pumps',
+    ',Imported HVAC Co,Dallas,TX,32.7767,-96.797,30,active,Pat Lee,Dispatch,yes',
+    'st_01,Ideal Contracting LLC,Monroe,CT,41.3326,-73.2371,40,active,,,yes',
   ].join('\n')
 
   const fd = new FormData()
@@ -213,6 +213,10 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
   const created = stations.find((s) => s.company === 'Imported HVAC Co')
   assert.ok(created && created.products.heatPumpElectrical === true)
   assert.ok(!created.products.heatPumpRefrigerant)
+  // The extra contact column populated the contacts array.
+  assert.equal(created.contacts.length, 1)
+  assert.equal(created.contacts[0].name, 'Pat Lee')
+  assert.equal(created.contacts[0].title, 'Dispatch')
   assert.equal(stations.find((s) => s.id === 'st_01').serviceRadiusMi, 40)
 
   // Dispatch role cannot import.

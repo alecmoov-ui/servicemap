@@ -337,6 +337,7 @@ function StationForm({ station, onClose }) {
       contractExpiry: '', effectiveDate: '', status: 'active', notes: '',
       products: { pumps: false, saltSystems: false, roboticCleaners: false, lights: false, filters: false, heatPumpElectrical: false, heatPumpRefrigerant: false },
       partsCategories: [],
+      contacts: [],
     }
   )
   const [saving, setSaving] = useState(false)
@@ -344,6 +345,13 @@ function StationForm({ station, onClose }) {
   const [locating, setLocating] = useState(false)
   const [geoMsg, setGeoMsg] = useState(null)
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }))
+  const addContact = () => setF((p) => ({ ...p, contacts: [...(p.contacts || []), { name: '', title: '', phone: '', email: '' }] }))
+  const setContact = (i, k, v) => setF((p) => {
+    const contacts = [...(p.contacts || [])]
+    contacts[i] = { ...contacts[i], [k]: v }
+    return { ...p, contacts }
+  })
+  const removeContact = (i) => setF((p) => ({ ...p, contacts: (p.contacts || []).filter((_, j) => j !== i) }))
 
   // Turn the typed address into coordinates so the coverage circle can render.
   async function locate() {
@@ -387,6 +395,7 @@ function StationForm({ station, onClose }) {
       ...editable, lat, lng, geocodePrecision: precision,
       serviceRadiusMi: parseInt(f.serviceRadiusMi, 10) || 25,
       totalTechnicians: num(f.totalTechnicians), epa608Techs: num(f.epa608Techs),
+      contacts: (f.contacts || []).filter((c) => c.name || c.title || c.phone || c.email),
     }
     try {
       setSaving(true)
@@ -445,6 +454,21 @@ function StationForm({ station, onClose }) {
             <Field label="Longitude"><input value={f.lng ?? ''} onChange={(e) => set('lng', e.target.value)} placeholder="auto from address" /></Field>
           </div>
         </details>
+
+        <div className="label-row">Additional contacts <span className="muted">(who to address — beyond the primary contact above)</span></div>
+        <div className="contacts-list">
+          {(f.contacts || []).map((c, i) => (
+            <div className="contact-row" key={i}>
+              <input placeholder="Name" value={c.name || ''} onChange={(e) => setContact(i, 'name', e.target.value)} />
+              <input placeholder="Role / title" value={c.title || ''} onChange={(e) => setContact(i, 'title', e.target.value)} />
+              <input placeholder="Phone" value={c.phone || ''} onChange={(e) => setContact(i, 'phone', e.target.value)} />
+              <input placeholder="Email" value={c.email || ''} onChange={(e) => setContact(i, 'email', e.target.value)} />
+              <button type="button" className="ghost small" onClick={() => removeContact(i)}>✕</button>
+            </div>
+          ))}
+          {(f.contacts || []).length === 0 && <div className="muted">No additional contacts yet.</div>}
+        </div>
+        <button type="button" className="ghost small" onClick={addContact} style={{ marginTop: 8 }}>+ Add contact</button>
 
         <div className="label-row">Products qualified to service</div>
         <div className="product-grid">

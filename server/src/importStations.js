@@ -64,6 +64,20 @@ const LEGACY_PRODUCT_ALIASES = {
   heatpumps: ['heatPumpElectrical'],
 }
 
+// Additional named contacts beyond the Primary Contact (which uses the fields above).
+// Fixed columns for up to two extra contacts round-trip in the spreadsheet; the app
+// form supports unlimited contacts.
+export const CONTACT_COLUMNS = [
+  { idx: 0, field: 'name', label: 'Contact 2 Name' },
+  { idx: 0, field: 'title', label: 'Contact 2 Title' },
+  { idx: 0, field: 'phone', label: 'Contact 2 Phone' },
+  { idx: 0, field: 'email', label: 'Contact 2 Email' },
+  { idx: 1, field: 'name', label: 'Contact 3 Name' },
+  { idx: 1, field: 'title', label: 'Contact 3 Title' },
+  { idx: 1, field: 'phone', label: 'Contact 3 Phone' },
+  { idx: 1, field: 'email', label: 'Contact 3 Email' },
+]
+
 // Export-only, ignored on import (derived from the service log).
 export const PERF_COLUMNS = [
   ['Dispatch Requests', (s) => s.perf?.dispatchRequests],
@@ -74,6 +88,7 @@ export const PERF_COLUMNS = [
 
 export const EXPORT_HEADER = [
   ...FIELD_COLUMNS.map((c) => c[0]),
+  ...CONTACT_COLUMNS.map((c) => c.label),
   ...PRODUCT_COLUMNS.map((c) => c[0]),
   ...PERF_COLUMNS.map((c) => c[0]),
 ]
@@ -90,9 +105,10 @@ export function stationToRow(s) {
     if (typeof s[field] === 'boolean') return s[field] ? 'yes' : 'no'
     return cell(s[field])
   })
+  const contacts = CONTACT_COLUMNS.map((c) => cell(s.contacts?.[c.idx]?.[c.field]))
   const products = PRODUCT_COLUMNS.map(([, key]) => (s.products?.[key] ? 'yes' : ''))
   const perf = PERF_COLUMNS.map(([, fn]) => cell(fn(s)))
-  return [...fields, ...products, ...perf]
+  return [...fields, ...contacts, ...products, ...perf]
 }
 
 // ---- Import parsing -------------------------------------------------------
@@ -109,6 +125,9 @@ const HEADER_LOOKUP = (() => {
   for (const [label, key] of PRODUCT_COLUMNS) {
     m.set(norm(label), { kind: 'product', key })
     m.set(norm(key), { kind: 'product', key })
+  }
+  for (const c of CONTACT_COLUMNS) {
+    m.set(norm(c.label), { kind: 'contact', idx: c.idx, field: c.field })
   }
   return m
 })()
@@ -162,6 +181,8 @@ export async function readRows(buffer, filename = '') {
 export function rowToPatch(rowObj) {
   const patch = {}
   const products = {}
+  const contactsTmp = {}
+  let contactColsPresent = false
   let id = null
   let company = null
   for (const [header, raw] of Object.entries(rowObj)) {
@@ -174,6 +195,10 @@ export function rowToPatch(rowObj) {
     if (!def) continue
     if (def.kind === 'product') {
       products[def.key] = truthy(raw)
+    } else if (def.kind === 'contact') {
+      contactColsPresent = true
+      contactsTmp[def.idx] = contactsTmp[def.idx] || {}
+      contactsTmp[def.idx][def.field] = String(raw ?? '').trim()
     } else if (def.field === 'id') {
       id = String(raw ?? '').trim() || null
     } else {
@@ -181,6 +206,14 @@ export function rowToPatch(rowObj) {
       patch[def.field] = value
       if (def.field === 'company') company = value
     }
+  }
+  // Only touch contacts if the file actually had contact columns.
+  if (contactColsPresent) {
+    patch.contacts = Object.keys(contactsTmp)
+      .sort((a, b) => a - b)
+      .map((k) => contactsTmp[k])
+      .map((c) => ({ name: c.name || '', title: c.title || '', phone: c.phone || '', email: c.email || '' }))
+      .filter((c) => c.name || c.title || c.phone || c.email)
   }
   return { patch, products, id, company }
 }
