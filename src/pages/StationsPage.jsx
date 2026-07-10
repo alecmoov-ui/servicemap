@@ -21,6 +21,27 @@ export default function StationsPage() {
   const [importing, setImporting] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  // Personal validation checklist — which rows you've reviewed. Stored in YOUR
+  // browser (localStorage), so it survives server redeploys and free-tier resets.
+  const VKEY = 'moov.validated.v1'
+  const [validated, setValidated] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(VKEY) || '[]')) } catch { return new Set() }
+  })
+  const persistValidated = (next) => {
+    localStorage.setItem(VKEY, JSON.stringify([...next]))
+    return next
+  }
+  const toggleValidated = (id) =>
+    setValidated((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return persistValidated(next)
+    })
+  const clearValidated = () => {
+    if (confirm('Clear all your validation checks?')) setValidated(persistValidated(new Set()))
+  }
+  const validatedCount = stations.filter((s) => validated.has(s.id)).length
+
   async function exportCsv() {
     setBusy(true)
     try {
@@ -36,7 +57,14 @@ export default function StationsPage() {
     <div className="stations-page">
       <section className="master">
         <div className="master-head">
-          <h3>Master station list <span className="muted">({stations.length})</span></h3>
+          <h3>
+            Master station list <span className="muted">({stations.length})</span>
+            {validatedCount > 0 && (
+              <span className="validated-count"> · ✓ {validatedCount}/{stations.length} validated
+                <button className="linkish" onClick={clearValidated}>clear</button>
+              </span>
+            )}
+          </h3>
           <div style={{ display: 'flex', gap: 8 }}>
             {can(role, 'exportData') && <button className="ghost" onClick={exportCsv} disabled={busy}>⬇ Export CSV</button>}
             {can(role, 'addStations') && <button className="ghost" onClick={() => setImporting(true)}>⬆ Import file</button>}
@@ -53,13 +81,22 @@ export default function StationsPage() {
           <table className="table">
             <thead>
               <tr>
+                <th className="check-col" title="Validated">✓</th>
                 <th>Company</th><th>Location</th><th>Radius</th><th>Products</th>
                 <th>Score</th><th>Accept</th><th>Avg days</th><th>Compliance</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
               {stations.map((s) => (
-                <tr key={s.id}>
+                <tr key={s.id} className={validated.has(s.id) ? 'validated-row' : ''}>
+                  <td className="check-col">
+                    <input
+                      type="checkbox"
+                      checked={validated.has(s.id)}
+                      onChange={() => toggleValidated(s.id)}
+                      title="Mark this station as validated (qualified & on file)"
+                    />
+                  </td>
                   <td>
                     <b>{s.company}</b>
                     {s.isMaster ? <span className="tag master-tag">master</span> : <span className="tag added-tag">added</span>}

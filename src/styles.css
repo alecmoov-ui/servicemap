@@ -215,6 +215,12 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 1
 .contact-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1.4fr auto; gap: 6px; align-items: center; }
 .contact-row input { padding: 6px 8px; }
 .master-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.check-col { width: 34px; text-align: center; }
+.check-col input { width: auto; cursor: pointer; }
+.table tr.validated-row td { background: #e7f7ee; }
+.table tr.validated-row td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.validated-count { font-size: 12px; font-weight: 600; color: var(--green); }
+.linkish { background: none; border: none; color: var(--blue); cursor: pointer; font-size: 12px; padding: 0 0 0 6px; text-decoration: underline; }
 .lock { color: var(--muted); font-size: 12.5px; }
 .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
 
