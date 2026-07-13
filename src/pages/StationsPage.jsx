@@ -402,8 +402,8 @@ function StationForm({ station, onClose }) {
     try {
       setLocating(true)
       const geo = await geocode(query)
-      setF((p) => ({ ...p, lat: geo.lat, lng: geo.lng, geocodePrecision: 'address' }))
-      setGeoMsg('✓ Located: ' + (geo.label || '').slice(0, 64))
+      setF((p) => ({ ...p, lat: geo.lat, lng: geo.lng, geocodePrecision: geo.approximate ? 'approx' : 'address' }))
+      setGeoMsg((geo.approximate ? '≈ Approximate (area matched — fine for a radius): ' : '✓ Located: ') + (geo.label || '').slice(0, 70))
     } catch (e) {
       setGeoMsg('Could not locate that address: ' + e.message)
     } finally {
