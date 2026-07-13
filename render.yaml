@@ -1,17 +1,14 @@
-# Render Blueprint — currently the FREE tier (no cost, no payment method).
-# Caveats: the service sleeps after ~15 min idle (slow first load), and there is NO
-# persistent disk, so data resets to the seeded stations on restart/redeploy.
+# Render Blueprint — PRODUCTION: always-on Starter instance + a persistent disk so
+# data (stations, documents, service log, backups) never resets.
 #
-# ---- UPGRADE TO PERSISTENT (production) when ready ----
-# 1) change `plan: free` to `plan: starter`
-# 2) uncomment the `disk:` block and the DB_PATH / UPLOAD_DIR / BACKUP_DIR env vars
-# That keeps stations, documents, service log, and backups permanently.
+# To run free again (data resets): set `plan: free`, and remove the `disk:` block and
+# the DB_PATH / UPLOAD_DIR / BACKUP_DIR env vars.
 
 services:
   - type: web
     name: moov-service-network
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npm run setup && npm run build
     startCommand: npm --prefix server start
     healthCheckPath: /api/health
@@ -23,16 +20,16 @@ services:
         value: production
       - key: JWT_SECRET          # auto-generated strong secret, kept stable
         generateValue: true
-      - key: SEED_PASSWORD       # your login password (set on first deploy)
+      - key: SEED_PASSWORD       # your initial login password (set on first deploy)
         sync: false
-      # --- For production persistence, switch plan to 'starter' and uncomment: ---
-      # - key: DB_PATH
-      #   value: /var/data/servicemap.db
-      # - key: UPLOAD_DIR
-      #   value: /var/data/uploads
-      # - key: BACKUP_DIR
-      #   value: /var/data/backups
-    # disk:
-    #   name: data
-    #   mountPath: /var/data
-    #   sizeGB: 1
+      # Keep the database, uploaded documents, and backups on the persistent disk.
+      - key: DB_PATH
+        value: /var/data/servicemap.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: BACKUP_DIR
+        value: /var/data/backups
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
