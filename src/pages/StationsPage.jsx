@@ -4,6 +4,7 @@ import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { complianceLabel, complianceClass, issueText } from '../lib/compliance.js'
+import { geocode } from '../lib/geocodeClient.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
 const DOC_SLOTS = [
@@ -400,7 +401,7 @@ function StationForm({ station, onClose }) {
     if (!query.trim()) return setGeoMsg('Enter a service address, or city/state/zip, first.')
     try {
       setLocating(true)
-      const geo = await api.geocode(query)
+      const geo = await geocode(query)
       setF((p) => ({ ...p, lat: geo.lat, lng: geo.lng, geocodePrecision: 'address' }))
       setGeoMsg('✓ Located: ' + (geo.label || '').slice(0, 64))
     } catch (e) {
@@ -422,7 +423,7 @@ function StationForm({ station, onClose }) {
       if (!query.trim()) return setError('Enter a service address (or lat/lng) so we can place the pin.')
       try {
         setSaving(true)
-        const geo = await api.geocode(query)
+        const geo = await geocode(query)
         lat = geo.lat; lng = geo.lng; precision = 'address'
       } catch (err) {
         setSaving(false)
