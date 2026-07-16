@@ -84,11 +84,18 @@ test('role enforcement: dispatch cannot add stations, admin can', async () => {
   assert.equal(created.data.isMaster, false)
 })
 
-test('master records cannot be deleted; non-master can', async () => {
+test('master records cannot be deleted; non-master can (admin/DTM only)', async () => {
   const adminToken = await tokenFor('admin@moovpool.com')
-  assert.equal((await api('/api/stations/st_01', { method: 'DELETE', token: adminToken })).status, 403)
+  assert.equal((await api('/api/stations/st_01', { method: 'DELETE', token: adminToken })).status, 403) // master protected
   const created = await api('/api/stations', { method: 'POST', token: adminToken, body: { company: 'Temp Co', city: 'X', state: 'TX' } })
-  assert.equal((await api(`/api/stations/${created.data.id}`, { method: 'DELETE', token: adminToken })).status, 200)
+
+  // Dispatch cannot remove stations.
+  const dispatchToken = await tokenFor('dispatch@moovpool.com')
+  assert.equal((await api(`/api/stations/${created.data.id}`, { method: 'DELETE', token: dispatchToken })).status, 403)
+
+  // DTM can remove a non-master station.
+  const dtmToken = await tokenFor('dtm@moovpool.com')
+  assert.equal((await api(`/api/stations/${created.data.id}`, { method: 'DELETE', token: dtmToken })).status, 200)
 })
 
 test('service log: any role can log; performance is recomputed', async () => {

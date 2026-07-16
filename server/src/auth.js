@@ -8,10 +8,14 @@ if (!process.env.JWT_SECRET) {
   console.warn('⚠  JWT_SECRET not set — using an insecure dev secret. Set it in production.')
 }
 
+// Policy:
+//  - admin (Network Admin): full control.
+//  - dtm (Territory Manager): same as admin EXCEPT managing users.
+//  - dispatch: log service tickets + view map/analytics only; no station or user edits.
 const PERMISSIONS = {
-  admin: { editStations: true, addStations: true, logService: true, viewAnalytics: true, manageUsers: true, viewAudit: true, exportData: true },
-  dtm: { editStations: true, addStations: true, logService: true, viewAnalytics: true, manageUsers: false, viewAudit: false, exportData: true },
-  dispatch: { editStations: false, addStations: false, logService: true, viewAnalytics: true, manageUsers: false, viewAudit: false, exportData: false },
+  admin: { viewAnalytics: true, logService: true, exportData: true, addStations: true, editStations: true, deleteStations: true, backups: true, viewAudit: true, manageUsers: true },
+  dtm: { viewAnalytics: true, logService: true, exportData: true, addStations: true, editStations: true, deleteStations: true, backups: true, viewAudit: true, manageUsers: false },
+  dispatch: { viewAnalytics: true, logService: true, exportData: false, addStations: false, editStations: false, deleteStations: false, backups: false, viewAudit: false, manageUsers: false },
 }
 
 export function can(role, action) {

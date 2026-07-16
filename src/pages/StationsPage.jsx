@@ -15,7 +15,7 @@ const DOC_SLOTS = [
 ]
 
 export default function StationsPage() {
-  const { stations, role } = useApp()
+  const { stations, role, refresh } = useApp()
   const [editing, setEditing] = useState(null) // station | 'new'
   const [logging, setLogging] = useState(null) // station
   const [backups, setBackups] = useState(false)
@@ -54,6 +54,16 @@ export default function StationsPage() {
     }
   }
 
+  async function removeStation(s) {
+    if (!confirm(`Remove ${s.company}? This can't be undone.`)) return
+    try {
+      await api.deleteStation(s.id)
+      await refresh()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
+
   return (
     <div className="stations-page">
       <section className="master">
@@ -69,7 +79,7 @@ export default function StationsPage() {
           <div style={{ display: 'flex', gap: 8 }}>
             {can(role, 'exportData') && <button className="ghost" onClick={exportCsv} disabled={busy}>⬇ Export CSV</button>}
             {can(role, 'addStations') && <button className="ghost" onClick={() => setImporting(true)}>⬆ Import file</button>}
-            {can(role, 'manageUsers') && <button className="ghost" onClick={() => setBackups(true)}>Backups</button>}
+            {can(role, 'backups') && <button className="ghost" onClick={() => setBackups(true)}>Backups</button>}
             {can(role, 'addStations') ? (
               <button className="primary" onClick={() => setEditing('new')}>+ Add station</button>
             ) : (
@@ -118,7 +128,8 @@ export default function StationsPage() {
                   <td><span className={'badge ' + s.status}>{s.status}</span></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {can(role, 'logService') && <button className="ghost small" onClick={() => setLogging(s)}>Log</button>}{' '}
-                    {can(role, 'editStations') && <button className="ghost small" onClick={() => setEditing(s)}>Edit</button>}
+                    {can(role, 'editStations') && <button className="ghost small" onClick={() => setEditing(s)}>Edit</button>}{' '}
+                    {can(role, 'deleteStations') && !s.isMaster && <button className="ghost small" onClick={() => removeStation(s)}>Remove</button>}
                   </td>
                 </tr>
               ))}

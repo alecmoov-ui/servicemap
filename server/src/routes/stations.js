@@ -244,8 +244,8 @@ stationsRouter.put('/:id', requirePermission('editStations'), (req, res) => {
   res.json(withDerived(getStation(req.params.id), computePerfMap()[req.params.id]))
 })
 
-// Master records are protected: only non-master stations can be deleted, admin only.
-stationsRouter.delete('/:id', requirePermission('manageUsers'), (req, res) => {
+// Master records are protected: only non-master stations can be deleted (admin/DTM).
+stationsRouter.delete('/:id', requirePermission('deleteStations'), (req, res) => {
   const s = getStation(req.params.id)
   if (!s) return res.status(404).json({ error: 'Station not found' })
   if (s.is_master) return res.status(403).json({ error: 'Master records cannot be deleted; set status to "paused" instead.' })

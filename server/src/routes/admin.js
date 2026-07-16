@@ -10,7 +10,7 @@ import { logFromReq } from '../activity.js'
 import { createSnapshot, BACKUP_DIR } from '../snapshot.js'
 
 export const adminRouter = Router()
-adminRouter.use(requireAuth, requirePermission('manageUsers'))
+adminRouter.use(requireAuth, requirePermission('backups'))
 
 function listSnapshots() {
   if (!existsSync(BACKUP_DIR)) return []

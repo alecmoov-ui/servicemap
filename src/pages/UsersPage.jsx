@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../lib/api.js'
 import { useApp } from '../lib/AppContext.jsx'
-import { ROLES } from '../lib/roles.js'
+import { ROLES, CAPABILITIES } from '../lib/roles.js'
 
 const APP_URL = window.location.origin
 const genPassword = () => {
@@ -117,9 +117,29 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
-        <p className="muted" style={{ marginTop: 12 }}>
-          Roles: {Object.values(ROLES).map((r) => `${r.label} — ${r.blurb}`).join('  ·  ')}
-        </p>
+        <h3 style={{ marginTop: 24 }}>Permissions by role</h3>
+        <div className="table-wrap">
+          <table className="table perm-matrix">
+            <thead>
+              <tr>
+                <th>Capability</th>
+                {Object.values(ROLES).map((r) => <th key={r.label} style={{ textAlign: 'center' }}>{r.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {CAPABILITIES.map(([cap, label]) => (
+                <tr key={cap}>
+                  <td>{label}</td>
+                  {Object.keys(ROLES).map((k) => (
+                    <td key={k} style={{ textAlign: 'center' }}>
+                      {ROLES[k].can[cap] ? <span className="perm-yes">✓</span> : <span className="perm-no">—</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {editing && (

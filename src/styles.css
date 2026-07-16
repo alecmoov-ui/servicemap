@@ -223,6 +223,9 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 1
 .linkish { background: none; border: none; color: var(--blue); cursor: pointer; font-size: 12px; padding: 0 0 0 6px; text-decoration: underline; }
 .temp-pw { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .temp-pw code { background: var(--bg); padding: 2px 7px; border-radius: 5px; font-size: 12.5px; }
+.perm-matrix .perm-yes { color: var(--green); font-weight: 700; }
+.perm-matrix .perm-no { color: var(--muted); }
+.perm-matrix td:first-child { font-weight: 600; }
 .lock { color: var(--muted); font-size: 12.5px; }
 .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
 
