@@ -139,6 +139,10 @@ function ensureColumn(table, column, definition) {
   }
 }
 ensureColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0')
+// Plaintext temp/invite password, visible to admins ONLY until the user sets their
+// own on first login (then cleared). Real passwords are always bcrypt-hashed and
+// never viewable — even by an admin.
+ensureColumn('users', 'temp_password', 'TEXT')
 ensureColumn('stations', 'contacts', "TEXT NOT NULL DEFAULT '[]'") // extra named contacts (JSON)
 ensureColumn('stations', 'zip', 'TEXT')
 

@@ -80,7 +80,7 @@ export default function ChangePassword({ forced = false, onClose }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>Change password</h3>
         {form}

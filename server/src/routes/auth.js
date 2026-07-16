@@ -44,7 +44,7 @@ authRouter.post('/change-password', requireAuth, (req, res) => {
   if (!bcrypt.compareSync(currentPassword || '', user.password_hash)) {
     return res.status(400).json({ error: 'Current password is incorrect' })
   }
-  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?')
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, temp_password = NULL WHERE id = ?')
     .run(bcrypt.hashSync(newPassword, 10), user.id)
   logFromReq(req, { action: 'user.password', entityType: 'user', entityId: user.id, summary: `${user.name} changed their password` })
   res.json({ ok: true })

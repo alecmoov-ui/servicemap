@@ -158,7 +158,7 @@ function ImportModal({ onClose }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>Import stations from a file</h3>
         <p className="muted">
@@ -258,7 +258,7 @@ function ServiceLogModal({ station, onClose }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>Service log — {station.company}</h3>
         <p className="muted">
@@ -330,7 +330,7 @@ function BackupsModal({ onClose }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>Database backups</h3>
         <p className="muted">
@@ -447,7 +447,7 @@ function StationForm({ station, onClose }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>{isNew ? 'Add service station' : 'Edit ' + station.company}</h3>
         {!isNew && station.isMaster && (

@@ -173,6 +173,8 @@ test('invited users must change password; self-service change works', async () =
     body: { email: 'pwtest@moovpool.com', name: 'PW Test', role: 'dispatch', password: 'temp1234' },
   })
   assert.equal(created.data.mustChangePassword, true)
+  // Admin can see the temp/invite password while the user is pending.
+  assert.equal(created.data.tempPassword, 'temp1234')
 
   // First login reflects the forced-change flag.
   const login1 = await api('/api/auth/login', { method: 'POST', body: { email: 'pwtest@moovpool.com', password: 'temp1234' } })
@@ -188,6 +190,12 @@ test('invited users must change password; self-service change works', async () =
   const login2 = await api('/api/auth/login', { method: 'POST', body: { email: 'pwtest@moovpool.com', password: 'brandnew1234' } })
   assert.equal(login2.status, 200)
   assert.equal(login2.data.user.mustChangePassword, false)
+
+  // Once they set their own password, the temp password is cleared (no longer visible).
+  const adminTok = await tokenFor('admin@moovpool.com')
+  const listed = (await api('/api/users', { token: adminTok })).data.find((u) => u.email === 'pwtest@moovpool.com')
+  assert.equal(listed.mustChangePassword, false)
+  assert.equal(listed.tempPassword, null)
 })
 
 test('bulk import: creates new and updates existing (matched by ID); dispatch role denied', async () => {
