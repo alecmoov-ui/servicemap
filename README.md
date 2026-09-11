@@ -48,20 +48,22 @@ first run (creating `server/data/servicemap.db`).
 ### Demo accounts (password `moov1234`)
 | Email | Role | Can do |
 |-------|------|--------|
-| `admin@moovpool.com` | **Admin** | everything, incl. delete non-master stations |
-| `dtm@moovpool.com` | **DTM** | edit/add stations, log service events, analytics |
-| `dispatch@moovpool.com` | **Dispatch** | log service events + read-only on the master list |
+| `admin@moovpool.com` | **Network Admin** | everything, incl. users and deleting non-master stations |
+| `dtm@moovpool.com` | **Territory Manager** | same as Network Admin |
+| `dispatch@moovpool.com` | **Dispatch** | view-only: browse/sort the map, coverage, analytics, station list |
+| `sales@moovpool.com` | **Sales** | view-only (same as Dispatch) |
 
 > Change the seed password by setting `SEED_PASSWORD` before the first run. **Set a
 > strong `JWT_SECRET` in production.**
 
 ### Accounts & passwords
 - Every signed-in user can **change their own password** (header → *Password*; min 8 chars).
-- When an admin **invites a user** (or resets someone's password), that person is **forced
-  to set their own password on next login** — the temp password is single-use.
+- Admins/Territory Managers **create users** (Users tab) with a username (email), a
+  permanent password, and a role. Passwords are stored hashed and can be reset from the
+  same screen.
 - Sessions expire after 12h; an expired session cleanly returns you to the sign-in screen.
-- For production, sign in as the seeded admin, **change its password**, invite your real
-  team, then they each set their own on first login.
+- For production, sign in as the seeded admin, **change its password**, then create your
+  real team's accounts (and remove the demo ones).
 
 ### One-process production mode
 ```bash
@@ -140,9 +142,9 @@ per resolved ticket (date, product, accepted?, completed?, days-to-complete, tic
 Station performance and **all analytics are derived automatically** from these entries —
 no running totals to maintain by hand.
 
-### Users (Admin only)
-Invite/manage team members and set their role. Guardrails prevent deleting your own
-account or removing the last admin.
+### Users (Admin / Territory Manager)
+Create team members with an email, password and role; every user is listed with their
+role. Guardrails prevent deleting your own account or removing the last admin.
 
 ### Roles & reliability
 Permissions live in `server/src/auth.js` (enforced) and `src/lib/roles.js` (UI gating).
@@ -209,6 +211,9 @@ the host dashboard and create the one DNS record it shows you; SSL re-issues aut
 ### Required production env vars
 `JWT_SECRET` (strong, stable), `DB_PATH`, `UPLOAD_DIR`, and `BACKUP_DIR` (all on the
 persistent disk), and `SEED_PASSWORD` (initial admin password). See `server/.env.example`.
+
+Optional, build-time (client): `VITE_TILE_URL` and `VITE_TILE_ATTRIBUTION` switch the map
+basemap from OpenStreetMap's public tiles to a commercial provider (see `src/lib/tiles.js`).
 
 ## Reliability & maintenance (the safety net)
 

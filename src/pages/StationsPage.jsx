@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../lib/AppContext.jsx'
 import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
-import { complianceLabel, complianceClass, issueText } from '../lib/compliance.js'
 import { geocode } from '../lib/geocodeClient.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
@@ -22,26 +21,17 @@ export default function StationsPage() {
   const [importing, setImporting] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  // Personal validation checklist — which rows you've reviewed. Stored in YOUR
-  // browser (localStorage), so it survives server redeploys and free-tier resets.
-  const VKEY = 'moov.validated.v1'
-  const [validated, setValidated] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem(VKEY) || '[]')) } catch { return new Set() }
-  })
-  const persistValidated = (next) => {
-    localStorage.setItem(VKEY, JSON.stringify([...next]))
-    return next
-  }
-  const toggleValidated = (id) =>
-    setValidated((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return persistValidated(next)
-    })
-  const clearValidated = () => {
-    if (confirm('Clear all your validation checks?')) setValidated(persistValidated(new Set()))
-  }
-  const validatedCount = stations.filter((s) => validated.has(s.id)).length
+  // State filter (A→Z). Options come from the stations actually on file.
+  const [stateFilter, setStateFilter] = useState('')
+  const states = useMemo(
+    () => [...new Set(stations.map((s) => (s.state || '').trim().toUpperCase()).filter(Boolean))].sort(),
+    [stations],
+  )
+  const visible = useMemo(() => {
+    const rows = stateFilter ? stations.filter((s) => (s.state || '').trim().toUpperCase() === stateFilter) : stations
+    // Sort by state, then company, so the list reads A→Z.
+    return [...rows].sort((a, b) => (a.state || '').localeCompare(b.state || '') || a.company.localeCompare(b.company))
+  }, [stations, stateFilter])
 
   async function exportCsv() {
     setBusy(true)
@@ -69,14 +59,14 @@ export default function StationsPage() {
       <section className="master">
         <div className="master-head">
           <h3>
-            Master station list <span className="muted">({stations.length})</span>
-            {validatedCount > 0 && (
-              <span className="validated-count"> · ✓ {validatedCount}/{stations.length} validated
-                <button className="linkish" onClick={clearValidated}>clear</button>
-              </span>
-            )}
+            Master station list{' '}
+            <span className="muted">({stateFilter ? `${visible.length} of ${stations.length}` : stations.length})</span>
           </h3>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select className="state-filter" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} title="Filter by state">
+              <option value="">All states</option>
+              {states.map((st) => <option key={st} value={st}>{st}</option>)}
+            </select>
             {can(role, 'exportData') && <button className="ghost" onClick={exportCsv} disabled={busy}>⬇ Export CSV</button>}
             {can(role, 'addStations') && <button className="ghost" onClick={() => setImporting(true)}>⬆ Import file</button>}
             {can(role, 'backups') && <button className="ghost" onClick={() => setBackups(true)}>Backups</button>}
@@ -92,27 +82,19 @@ export default function StationsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th className="check-col" title="Validated">✓</th>
-                <th>Company</th><th>Location</th><th>Radius</th><th>Products</th>
-                <th>Score</th><th>Accept</th><th>Avg days</th><th>Compliance</th><th>Status</th><th></th>
+                <th>Company</th><th>City</th><th>State</th><th>Radius</th><th>Products</th>
+                <th>Score</th><th>Accept</th><th>Avg days</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
-              {stations.map((s) => (
-                <tr key={s.id} className={validated.has(s.id) ? 'validated-row' : ''}>
-                  <td className="check-col">
-                    <input
-                      type="checkbox"
-                      checked={validated.has(s.id)}
-                      onChange={() => toggleValidated(s.id)}
-                      title="Mark this station as validated (qualified & on file)"
-                    />
-                  </td>
+              {visible.map((s) => (
+                <tr key={s.id}>
                   <td>
                     <b>{s.company}</b>
                     {s.isMaster ? <span className="tag master-tag">master</span> : <span className="tag added-tag">added</span>}
                   </td>
-                  <td>{s.city}, {s.state}</td>
+                  <td>{s.city}</td>
+                  <td><b>{s.state}</b></td>
                   <td>{s.serviceRadiusMi} mi</td>
                   <td className="prodcell">
                     {PRODUCTS.filter((p) => s.products?.[p.key]).map((p) => (
@@ -122,9 +104,6 @@ export default function StationsPage() {
                   <td><b>{reliabilityScore(s.perf)}</b></td>
                   <td>{acceptanceRate(s.perf) != null ? Math.round(acceptanceRate(s.perf) * 100) + '%' : '—'}</td>
                   <td>{s.perf.avgCompletionDays != null ? s.perf.avgCompletionDays : '—'}</td>
-                  <td title={issueText(s.compliance)}>
-                    <span className={'badge ' + complianceClass(s.compliance?.level)}>{complianceLabel(s.compliance?.level)}</span>
-                  </td>
                   <td><span className={'badge ' + s.status}>{s.status}</span></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {can(role, 'logService') && <button className="ghost small" onClick={() => setLogging(s)}>Log</button>}{' '}

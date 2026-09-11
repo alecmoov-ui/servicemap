@@ -37,7 +37,8 @@ change that makes CI red.**
 ## Invariants — do not break these
 1. **Roles are enforced on the SERVER** (`server/src/auth.js`, `requirePermission`). UI
    gating (`src/lib/roles.js`) is convenience only — never rely on it for security.
-   Roles: `admin`, `dtm`, `dispatch`. Keep both permission lists in sync.
+   Roles: `admin`, `dtm` (same as admin), `dispatch` and `sales` (view-only). Keep both
+   permission lists in sync.
 2. **Master station records (`is_master = 1`) can be edited but never deleted.** The
    delete route rejects them. Don't add a bypass.
 3. **Performance is derived, not stored as counters.** `computePerfMap()` aggregates

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet'
+import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { starRating } from '../lib/ratings.js'
 
@@ -44,10 +45,7 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
 
   return (
     <MapContainer center={[39.5, -98.35]} zoom={4} className="map" scrollWheelZoom>
-      <TileLayer
-        attribution='&copy; OpenStreetMap contributors'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <TileLayer {...TILE_OPTIONS} />
       <FitBounds points={focusPoints} />
 
       {stations.map((s) => {

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet'
+import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 
 const pin = L.divIcon({
@@ -31,7 +32,7 @@ export default function LocatePreview({ lat, lng, radiusMi }) {
     <div className="locate-preview">
       {!has && <div className="locate-empty">Enter an address and click <b>Locate</b> to preview the coverage circle.</div>}
       <MapContainer center={has ? [lat, lng] : [39.5, -98.35]} zoom={has ? 9 : 4} className="locate-map" scrollWheelZoom={false}>
-        <TileLayer attribution="&copy; OpenStreetMap" url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer {...TILE_OPTIONS} />
         {has && (
           <>
             <Marker position={[lat, lng]} icon={pin} />

@@ -8,15 +8,15 @@ if (!process.env.JWT_SECRET) {
   console.warn('⚠  JWT_SECRET not set — using an insecure dev secret. Set it in production.')
 }
 
-// Policy:
+// Policy (mirrored in src/lib/roles.js for UI gating):
 //  - admin (Network Admin): full control.
-//  - dtm (Territory Manager): same as admin EXCEPT managing users.
-//  - dispatch: log service tickets + view map/analytics only; no station or user edits.
-const PERMISSIONS = {
-  admin: { viewAnalytics: true, logService: true, exportData: true, addStations: true, editStations: true, deleteStations: true, backups: true, viewAudit: true, manageUsers: true },
-  dtm: { viewAnalytics: true, logService: true, exportData: true, addStations: true, editStations: true, deleteStations: true, backups: true, viewAudit: true, manageUsers: false },
-  dispatch: { viewAnalytics: true, logService: true, exportData: false, addStations: false, editStations: false, deleteStations: false, backups: false, viewAudit: false, manageUsers: false },
-}
+//  - dtm (Territory Manager): same as admin.
+//  - dispatch, sales: view-only — browse/sort the map, coverage, analytics and station
+//    list. No station edits, no service log, no exports, no user management.
+const FULL = { viewAnalytics: true, logService: true, exportData: true, addStations: true, editStations: true, deleteStations: true, backups: true, viewAudit: true, manageUsers: true }
+const VIEW_ONLY = { viewAnalytics: true, logService: false, exportData: false, addStations: false, editStations: false, deleteStations: false, backups: false, viewAudit: false, manageUsers: false }
+const PERMISSIONS = { admin: FULL, dtm: FULL, dispatch: VIEW_ONLY, sales: VIEW_ONLY }
+export const ROLE_KEYS = Object.keys(PERMISSIONS)
 
 export function can(role, action) {
   return !!PERMISSIONS[role]?.[action]

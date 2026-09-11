@@ -34,19 +34,19 @@ one DNS record; whoever manages `moovpool.com` DNS adds it. SSL issues automatic
 
 You (admin) create everyone else — no one self-registers.
 
-1. Sign in as an admin → **Users** tab → **+ Invite user**.
-2. Enter their **name**, **email** (use their real Microsoft/work email), **role**, and a
-   **temporary password**.
-3. Share the temp password with them (in person / secure message).
-4. On their **first login they're forced to set their own password** — you never know it.
+1. Sign in as an Admin (or Territory Manager) → **Users** tab → **+ Create user**.
+2. Enter their **name**, **email** (their real work email — this is their username), **role**,
+   and a **password**.
+3. Share the email + password with them (in person / secure message). It's permanent; they
+   can change it themselves from the header → *Password*.
 
 **Roles:**
-- **Admin** — everything: edit master list, manage users, backups, activity log.
-- **DTM (Territory Manager)** — add/edit stations, log service events, import/export.
-- **Dispatch** — find centers + log service events; read-only on the master list.
+- **Network Admin** — everything: edit master list, manage users, backups, activity log.
+- **Territory Manager** — same as Network Admin.
+- **Dispatch** and **Sales** — view-only: find centers, browse coverage/analytics, and sort
+  the station list. Cannot add, edit or remove anything.
 
-Forgot a password? An admin opens **Users → Edit → set a new temp password**; that user is
-again forced to change it on next login.
+Forgot a password? An admin opens **Users → Edit → set a new password**.
 
 ## 4. How your team accesses it
 

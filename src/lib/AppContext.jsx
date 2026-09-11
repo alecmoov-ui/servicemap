@@ -70,7 +70,7 @@ export function AppProvider({ children }) {
 
   const changePassword = useCallback(async (currentPassword, newPassword) => {
     await api.changePassword(currentPassword, newPassword)
-    const { user } = await api.me() // reflects cleared mustChangePassword flag
+    const { user } = await api.me()
     setUser(user)
   }, [])
 

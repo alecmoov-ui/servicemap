@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup } from 'react-leaflet'
+import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { useStations } from '../lib/useStore.js'
 import { haversineMiles } from '../lib/geo.js'
@@ -132,10 +133,7 @@ export default function CoveragePage() {
 
       <div className="map-pane">
         <MapContainer center={[39.5, -96]} zoom={4} className="map" scrollWheelZoom>
-          <TileLayer
-            attribution="&copy; OpenStreetMap contributors"
-            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <TileLayer {...TILE_OPTIONS} />
 
           {/* Density layer: overlapping radii shade darker where coverage is redundant */}
           {stations.map((s) => (

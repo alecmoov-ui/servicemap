@@ -20,9 +20,6 @@ export default function App() {
 
   if (!user) return <LoginPage />
 
-  // Invited/admin-reset users must set their own password before using the app.
-  if (user.mustChangePassword) return <ChangePassword forced />
-
   return <Shell />
 }
 
