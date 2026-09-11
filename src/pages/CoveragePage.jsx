@@ -6,6 +6,7 @@ import { useStations } from '../lib/useStore.js'
 import { haversineMiles } from '../lib/geo.js'
 import { PRODUCTS } from '../lib/ratings.js'
 import { METROS } from '../data/metros.js'
+import { searchLinks, tierOf, worksheetCsv, downloadText } from '../lib/recruiting.js'
 
 const FILTERS = [{ key: 'all', label: 'All products' }, ...PRODUCTS]
 
@@ -18,6 +19,31 @@ function gapIcon(pop) {
     iconSize: [d, d],
     iconAnchor: [d / 2, d / 2],
   })
+}
+
+// One recruiting target: metro, population, nearest station, and Google search links.
+function GapRow({ m, thin }) {
+  return (
+    <div className="gap-row">
+      <div className="gap-main">
+        <b>{m.city}, {m.state}</b>
+        <span className={thin ? 'gap-pop thin' : 'gap-pop'}>{m.pop.toFixed(1)}M</span>
+      </div>
+      <div className="muted">
+        {thin
+          ? `Only ${m.nearestStation?.company ?? 'one station'} covers this metro`
+          : `Nearest station ${m.nearest === Infinity ? '—' : Math.round(m.nearest) + ' mi'} away` +
+            (m.nearestStation ? ` (${m.nearestStation.company})` : '')}
+      </div>
+      <div className="gap-links">
+        {searchLinks(m).map((l) => (
+          <a key={l.label} className="chip-mini" href={l.href} target="_blank" rel="noreferrer">
+            🔍 {l.label}
+          </a>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default function CoveragePage() {
@@ -35,16 +61,17 @@ export default function CoveragePage() {
     return METROS.map((m) => {
       let nearest = Infinity
       let nearestStation = null
-      let coveringCount = 0
+      const coveringStations = []
       for (const s of stations) {
         const d = haversineMiles(m, s)
         if (d < nearest) {
           nearest = d
           nearestStation = s
         }
-        if (d <= s.serviceRadiusMi) coveringCount++
+        if (d <= s.serviceRadiusMi) coveringStations.push(s)
       }
-      return { ...m, nearest, nearestStation, coveringCount, covered: coveringCount > 0 }
+      const coveringCount = coveringStations.length
+      return { ...m, nearest, nearestStation, coveringStations, coveringCount, covered: coveringCount > 0 }
     })
   }, [stations])
 
@@ -52,6 +79,13 @@ export default function CoveragePage() {
     () => metros.filter((m) => !m.covered).sort((a, b) => b.pop - a.pop),
     [metros]
   )
+  // Covered by a single station only — one dropout re-opens the gap.
+  const thin = useMemo(
+    () => metros.filter((m) => tierOf(m) === 'thin').sort((a, b) => b.pop - a.pop),
+    [metros]
+  )
+  const exportWorksheet = () =>
+    downloadText(`moov-recruiting-${product}-${new Date().toISOString().slice(0, 10)}.csv`, worksheetCsv(metros, product))
 
   const coveredPop = metros.filter((m) => m.covered).reduce((a, m) => a + m.pop, 0)
   const totalPop = metros.reduce((a, m) => a + m.pop, 0)
@@ -108,19 +142,28 @@ export default function CoveragePage() {
           <div className="results-head">
             🎯 Top recruiting targets — uncovered metros, by population
           </div>
+          <div className="muted recruit-help">
+            Prospect each metro with the ready-made searches, or download the worksheet (gap + thin
+            metros ranked by population, search links, blank company/phone/email/status columns).
+          </div>
+          <button className="ghost small" onClick={exportWorksheet} disabled={gaps.length + thin.length === 0}>
+            ⬇ Recruiting worksheet (CSV)
+          </button>
           {gaps.length === 0 && <div className="empty">Every tracked metro is covered for this filter.</div>}
           {gaps.map((m) => (
-            <div key={m.city} className="gap-row">
-              <div className="gap-main">
-                <b>{m.city}, {m.state}</b>
-                <span className="gap-pop">{m.pop.toFixed(1)}M</span>
-              </div>
-              <div className="muted">
-                Nearest station {m.nearest === Infinity ? '—' : Math.round(m.nearest) + ' mi'} away
-                {m.nearestStation ? ` (${m.nearestStation.company})` : ''}
-              </div>
-            </div>
+            <GapRow key={m.city} m={m} />
           ))}
+
+          {thin.length > 0 && (
+            <>
+              <div className="results-head" style={{ marginTop: 18 }}>
+                ⚠️ Thin coverage — one station only, by population
+              </div>
+              {thin.map((m) => (
+                <GapRow key={m.city} m={m} thin />
+              ))}
+            </>
+          )}
 
           <div className="results-head" style={{ marginTop: 18 }}>Stations by state</div>
           <div className="state-coverage">

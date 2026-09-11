@@ -101,6 +101,11 @@ A second map showing **coverage density** (overlapping radii shade darker) and *
 detection** against major US metros — uncovered metros appear as red pins sized by
 population, with a ranked recruiting-target list. Filterable by product.
 
+**Recruiting (no API keys):** each uncovered or *thin* (single-station) metro carries
+ready-made Google searches — Maps, repair shops, and existing factory warranty stations —
+and **⬇ Recruiting worksheet (CSV)** downloads the ranked target list with those links plus
+blank Company / Website / Phone / Email / Status columns to track outreach in Excel.
+
 ### Analytics
 Network KPIs, the requested→accepted→completed funnel, stations-by-state, product
 coverage, average completion duration, and a reliability leaderboard — all derived from
