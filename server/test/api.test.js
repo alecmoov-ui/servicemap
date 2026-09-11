@@ -98,8 +98,11 @@ test('master records cannot be deleted; non-master can (admin/DTM only)', async 
   assert.equal((await api(`/api/stations/${created.data.id}`, { method: 'DELETE', token: dtmToken })).status, 200)
 })
 
-test('service log: any role can log; performance is recomputed', async () => {
-  const token = await tokenFor('dispatch@moovpool.com')
+test('service log: dtm can log, view-only roles cannot; performance is recomputed', async () => {
+  const dispatchToken = await tokenFor('dispatch@moovpool.com')
+  assert.equal((await api('/api/stations/st_02/service-events', { method: 'POST', token: dispatchToken, body: { accepted: true } })).status, 403)
+
+  const token = await tokenFor('dtm@moovpool.com')
   const before = (await api('/api/stations', { token })).data.find((s) => s.id === 'st_02').perf
 
   const updated = await api('/api/stations/st_02/service-events', {
@@ -173,36 +176,44 @@ test('compliance: flags expired insurance, heat-pump w/o license, and clears whe
   assert.equal(ok.data.compliance.level, 'ok')
 })
 
-test('invited users must change password; self-service change works', async () => {
-  const adminToken = await tokenFor('admin@moovpool.com')
+test('user creation: permanent password, sales role is view-only, dtm can manage users', async () => {
+  const dtmToken = await tokenFor('dtm@moovpool.com')
   const created = await api('/api/users', {
-    method: 'POST', token: adminToken,
-    body: { email: 'pwtest@moovpool.com', name: 'PW Test', role: 'dispatch', password: 'temp1234' },
+    method: 'POST', token: dtmToken,
+    body: { email: 'newrep@moovpool.com', name: 'Sales Rep', role: 'sales', password: 'sales1234' },
   })
-  assert.equal(created.data.mustChangePassword, true)
-  // Admin can see the temp/invite password while the user is pending.
-  assert.equal(created.data.tempPassword, 'temp1234')
+  assert.equal(created.status, 201)
+  assert.equal(created.data.role, 'sales')
+  // No temp-password / forced-change flow: the hash is never returned and login works as-is.
+  assert.equal(created.data.tempPassword, undefined)
+  assert.equal(created.data.mustChangePassword, undefined)
+  const login = await api('/api/auth/login', { method: 'POST', body: { email: 'newrep@moovpool.com', password: 'sales1234' } })
+  assert.equal(login.status, 200)
+  assert.equal(login.data.user.mustChangePassword, undefined)
+  const salesToken = login.data.token
 
-  // First login reflects the forced-change flag.
-  const login1 = await api('/api/auth/login', { method: 'POST', body: { email: 'pwtest@moovpool.com', password: 'temp1234' } })
-  assert.equal(login1.data.user.mustChangePassword, true)
-  const userToken = login1.data.token
+  // Sales can view but not change anything.
+  assert.equal((await api('/api/stations', { token: salesToken })).status, 200)
+  assert.equal((await api('/api/stations', { method: 'POST', token: salesToken, body: { company: 'Nope' } })).status, 403)
+  assert.equal((await api('/api/stations/st_01', { method: 'PUT', token: salesToken, body: { company: 'Nope' } })).status, 403)
+  assert.equal((await api('/api/stations/st_01/service-events', { method: 'POST', token: salesToken, body: { accepted: true } })).status, 403)
+  assert.equal((await api('/api/users', { token: salesToken })).status, 403)
+  assert.equal((await api('/api/activity', { token: salesToken })).status, 403)
 
-  // Wrong current password is rejected; too-short new password is rejected.
-  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: userToken, body: { currentPassword: 'wrong', newPassword: 'longenough1' } })).status, 400)
-  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: userToken, body: { currentPassword: 'temp1234', newPassword: 'short' } })).status, 400)
+  // Unknown roles are rejected; the list shows every user with their role.
+  assert.equal((await api('/api/users', { method: 'POST', token: dtmToken, body: { email: 'x@moovpool.com', name: 'X', role: 'ceo', password: 'abcdef1' } })).status, 400)
+  const listed = (await api('/api/users', { token: dtmToken })).data.find((u) => u.email === 'newrep@moovpool.com')
+  assert.equal(listed.role, 'sales')
 
-  // Successful change clears the flag and the new password works.
-  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: userToken, body: { currentPassword: 'temp1234', newPassword: 'brandnew1234' } })).status, 200)
-  const login2 = await api('/api/auth/login', { method: 'POST', body: { email: 'pwtest@moovpool.com', password: 'brandnew1234' } })
-  assert.equal(login2.status, 200)
-  assert.equal(login2.data.user.mustChangePassword, false)
+  // Admin-set password replaces the old one immediately (no forced change).
+  assert.equal((await api(`/api/users/${created.data.id}`, { method: 'PUT', token: dtmToken, body: { password: 'newpass99' } })).status, 200)
+  assert.equal((await api('/api/auth/login', { method: 'POST', body: { email: 'newrep@moovpool.com', password: 'sales1234' } })).status, 401)
+  assert.equal((await api('/api/auth/login', { method: 'POST', body: { email: 'newrep@moovpool.com', password: 'newpass99' } })).status, 200)
 
-  // Once they set their own password, the temp password is cleared (no longer visible).
-  const adminTok = await tokenFor('admin@moovpool.com')
-  const listed = (await api('/api/users', { token: adminTok })).data.find((u) => u.email === 'pwtest@moovpool.com')
-  assert.equal(listed.mustChangePassword, false)
-  assert.equal(listed.tempPassword, null)
+  // Self-service change still works for the signed-in user.
+  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: salesToken, body: { currentPassword: 'wrong', newPassword: 'longenough1' } })).status, 400)
+  assert.equal((await api('/api/auth/change-password', { method: 'POST', token: salesToken, body: { currentPassword: 'newpass99', newPassword: 'brandnew1234' } })).status, 200)
+  assert.equal((await api('/api/auth/login', { method: 'POST', body: { email: 'newrep@moovpool.com', password: 'brandnew1234' } })).status, 200)
 })
 
 test('bulk import: creates new and updates existing (matched by ID); dispatch role denied', async () => {
@@ -243,12 +254,13 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
   assert.equal(denied.status, 403)
 })
 
-test('activity log: admin-only, records service-log entries', async () => {
+test('activity log: admin/dtm only, records service-log entries', async () => {
   const adminToken = await tokenFor('admin@moovpool.com')
+  const dtmToken = await tokenFor('dtm@moovpool.com')
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
   assert.equal((await api('/api/activity', { token: dispatchToken })).status, 403)
-  await api('/api/stations/st_03/service-events', { method: 'POST', token: dispatchToken, body: { accepted: true, completed: false } })
+  await api('/api/stations/st_03/service-events', { method: 'POST', token: dtmToken, body: { accepted: true, completed: false } })
   const log = await api('/api/activity', { token: adminToken })
   assert.equal(log.status, 200)
-  assert.ok(log.data.some((e) => e.action === 'service.log' && e.actor === 'dispatch@moovpool.com'))
+  assert.ok(log.data.some((e) => e.action === 'service.log' && e.actor === 'dtm@moovpool.com'))
 })

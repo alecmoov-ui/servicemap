@@ -26,7 +26,10 @@ export function buildApp({ seed = true } = {}) {
   app.set('trust proxy', 1) // behind Render/other proxies — needed for correct client IPs
   // Security headers. CSP is disabled because the map loads OpenStreetMap tiles and
   // geocoding cross-origin; the app is login-gated and served same-origin otherwise.
-  app.use(helmet({ contentSecurityPolicy: false }))
+  // Helmet's default Referrer-Policy is `no-referrer`, which strips the Referer from
+  // tile requests — OSM's tile policy then rejects them with an "Access blocked" 403
+  // tile. Send the origin instead so the app identifies itself.
+  app.use(helmet({ contentSecurityPolicy: false, referrerPolicy: { policy: 'strict-origin-when-cross-origin' } }))
   app.use(cors())
   app.use(express.json())
 

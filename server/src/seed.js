@@ -18,6 +18,7 @@ const DEMO_USERS = [
   { email: 'admin@moovpool.com', name: 'Network Admin', role: 'admin' },
   { email: 'dtm@moovpool.com', name: 'Territory Manager', role: 'dtm' },
   { email: 'dispatch@moovpool.com', name: 'Dispatcher', role: 'dispatch' },
+  { email: 'sales@moovpool.com', name: 'Sales', role: 'sales' },
 ]
 
 export function seedDatabase({ force = false } = {}) {

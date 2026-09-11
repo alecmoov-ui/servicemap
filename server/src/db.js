@@ -15,14 +15,18 @@ export const db = new Database(process.env.DB_PATH || join(DATA_DIR, 'servicemap
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
+// Roles are validated in code (routes/users.js against auth.js ROLE_KEYS), not by a
+// CHECK constraint, so adding a role never needs a table rebuild again.
+const USERS_COLUMNS = `
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   email         TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
-  role          TEXT NOT NULL CHECK (role IN ('admin','dtm','dispatch')),
+  role          TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))`
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (${USERS_COLUMNS}
 );
 
 CREATE TABLE IF NOT EXISTS stations (
@@ -138,11 +142,23 @@ function ensureColumn(table, column, definition) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
   }
 }
-ensureColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0')
-// Plaintext temp/invite password, visible to admins ONLY until the user sets their
-// own on first login (then cleared). Real passwords are always bcrypt-hashed and
-// never viewable — even by an admin.
-ensureColumn('users', 'temp_password', 'TEXT')
+// Migration: databases created before the `sales` role constrained users.role with a
+// CHECK clause listing the original three roles. Rebuild the table without it (rows and
+// ids are preserved); this also drops the retired temp-password columns.
+{
+  const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get()
+  if (/CHECK/i.test(sql)) {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE users_new (${USERS_COLUMNS});
+        INSERT INTO users_new (id, email, name, role, password_hash, created_at)
+          SELECT id, email, name, role, password_hash, created_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;`)
+    })()
+    console.log('Migrated users table: removed role CHECK constraint.')
+  }
+}
 ensureColumn('stations', 'contacts', "TEXT NOT NULL DEFAULT '[]'") // extra named contacts (JSON)
 ensureColumn('stations', 'zip', 'TEXT')
 

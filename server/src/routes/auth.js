@@ -6,13 +6,7 @@ import { logActivity, logFromReq } from '../activity.js'
 
 export const authRouter = Router()
 
-const safeUser = (u) => ({
-  id: u.id,
-  email: u.email,
-  name: u.name,
-  role: u.role,
-  mustChangePassword: !!u.must_change_password,
-})
+const safeUser = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role })
 
 authRouter.post('/login', (req, res) => {
   const { email, password } = req.body || {}
@@ -26,7 +20,7 @@ authRouter.post('/login', (req, res) => {
   res.json({ token: signToken(safe), user: safe })
 })
 
-// Read fresh from the DB so flags like mustChangePassword reflect current state.
+// Read fresh from the DB so a deleted account is signed out on next load.
 authRouter.get('/me', requireAuth, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.sub)
   if (!user) return res.status(401).json({ error: 'Account no longer exists' })
@@ -44,7 +38,7 @@ authRouter.post('/change-password', requireAuth, (req, res) => {
   if (!bcrypt.compareSync(currentPassword || '', user.password_hash)) {
     return res.status(400).json({ error: 'Current password is incorrect' })
   }
-  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, temp_password = NULL WHERE id = ?')
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
     .run(bcrypt.hashSync(newPassword, 10), user.id)
   logFromReq(req, { action: 'user.password', entityType: 'user', entityId: user.id, summary: `${user.name} changed their password` })
   res.json({ ok: true })
