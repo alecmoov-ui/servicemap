@@ -3,7 +3,7 @@ import MapView from '../components/MapView.jsx'
 import { useStations } from '../lib/useStore.js'
 import { api } from '../lib/api.js'
 import { geocode } from '../lib/geocodeClient.js'
-import { haversineMiles } from '../lib/geo.js'
+import { coveringPin, pinLabel, stationPins } from '../lib/geo.js'
 import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completionRate } from '../lib/ratings.js'
 
 // Built-in example service locations (coordinates included) so the search flow —
@@ -38,10 +38,13 @@ export default function MapPage() {
   // ranked by reliability. No false positives: product + range are hard filters.
   const matches = useMemo(() => {
     if (!consumer) return []
+    // A station matches if ANY of its pins (primary or additional service area)
+    // covers the consumer; distance is to the nearest covering pin.
     return stations
       .filter((s) => s.products?.[product])
-      .map((s) => ({ ...s, distanceMi: haversineMiles(consumer, s) }))
-      .filter((s) => s.distanceMi <= s.serviceRadiusMi)
+      .map((s) => ({ s, hit: coveringPin(consumer, s) }))
+      .filter(({ hit }) => hit)
+      .map(({ s, hit }) => ({ ...s, distanceMi: hit.distanceMi, viaPin: hit.pin }))
       .sort((a, b) => reliabilityScore(b.perf) - reliabilityScore(a.perf) || a.distanceMi - b.distanceMi)
   }, [consumer, product, stations])
 
@@ -161,7 +164,7 @@ export default function MapPage() {
                   {stars(starRating(s.perf))}
                 </div>
                 <div className="card-meta">
-                  {s.distanceMi.toFixed(1)} mi · {s.city}, {s.state} · {s.serviceType}
+                  {[`${s.distanceMi.toFixed(1)} mi`, s.viaPin.primary ? `${s.city}, ${s.state}` : `${pinLabel(s.viaPin)} location`, s.serviceType].filter(Boolean).join(' · ')}
                 </div>
                 {s.compliance && s.compliance.level !== 'ok' && (
                   <div className={'compliance-chip ' + s.compliance.level} title={s.compliance.issues.map((i) => i.message).join(' · ')}>
@@ -184,7 +187,10 @@ export default function MapPage() {
                         <b>{[c.name, c.phone, c.email].filter(Boolean).join(' · ') || '—'}</b>
                       </div>
                     ))}
-                    <div className="kv"><span>Radius</span><b>{s.serviceRadiusMi} mi</b></div>
+                    <div className="kv"><span>Radius</span><b>{s.viaPin.radiusMi} mi{!s.viaPin.primary ? ` (${pinLabel(s.viaPin)})` : ''}</b></div>
+                    {stationPins(s).length > 1 && (
+                      <div className="kv"><span>Locations</span><b>{stationPins(s).map((p) => p.primary ? `${s.city}, ${s.state}` : pinLabel(p)).join(' · ')}</b></div>
+                    )}
                     <div className="kv"><span>Insurance</span><b>{s.proofOfInsurance || (s.insuranceCarrier ? s.insuranceCarrier : 'Not on file')}</b></div>
                     <div className="kv"><span>HVAC license</span><b>{s.hvacLicense || s.hvacCertification || '—'}</b></div>
                     <div className="muted" style={{ marginTop: 8 }}>

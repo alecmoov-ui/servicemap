@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup } from 're
 import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { useStations } from '../lib/useStore.js'
-import { haversineMiles } from '../lib/geo.js'
+import { haversineMiles, stationPins, stationStates, pinLabel } from '../lib/geo.js'
 import { PRODUCTS } from '../lib/ratings.js'
 import { METROS } from '../data/metros.js'
 
@@ -37,12 +37,16 @@ export default function CoveragePage() {
       let nearestStation = null
       let coveringCount = 0
       for (const s of stations) {
-        const d = haversineMiles(m, s)
-        if (d < nearest) {
-          nearest = d
-          nearestStation = s
+        let covers = false
+        for (const p of stationPins(s)) {
+          const d = haversineMiles(m, p)
+          if (d < nearest) {
+            nearest = d
+            nearestStation = s
+          }
+          if (d <= p.radiusMi) covers = true
         }
-        if (d <= s.serviceRadiusMi) coveringCount++
+        if (covers) coveringCount++
       }
       return { ...m, nearest, nearestStation, coveringCount, covered: coveringCount > 0 }
     })
@@ -61,7 +65,7 @@ export default function CoveragePage() {
   // Stations per state for the servicing set.
   const byState = useMemo(() => {
     const m = {}
-    stations.forEach((s) => (m[s.state] = (m[s.state] || 0) + 1))
+    stations.forEach((s) => stationStates(s).forEach((st) => (m[st] = (m[st] || 0) + 1)))
     return Object.entries(m).sort((a, b) => b[1] - a[1])
   }, [stations])
 
@@ -136,28 +140,28 @@ export default function CoveragePage() {
           <TileLayer {...TILE_OPTIONS} />
 
           {/* Density layer: overlapping radii shade darker where coverage is redundant */}
-          {stations.map((s) => (
+          {stations.flatMap(stationPins).map((p) => (
             <Circle
-              key={'c' + s.id}
-              center={[s.lat, s.lng]}
-              radius={s.serviceRadiusMi * 1609.34}
+              key={'c' + p.key}
+              center={[p.lat, p.lng]}
+              radius={p.radiusMi * 1609.34}
               pathOptions={{ color: '#1f9d55', weight: 0, fillColor: '#1f9d55', fillOpacity: 0.14 }}
             />
           ))}
-          {stations.map((s) => (
+          {stations.flatMap((s) => stationPins(s).map((p) => (
             <CircleMarker
-              key={'d' + s.id}
-              center={[s.lat, s.lng]}
+              key={'d' + p.key}
+              center={[p.lat, p.lng]}
               radius={3}
               pathOptions={{ color: '#0f6b39', fillColor: '#0f6b39', fillOpacity: 1, weight: 1 }}
             >
               <Popup>
                 <strong>{s.company}</strong>
                 <br />
-                {s.city}, {s.state} · {s.serviceRadiusMi} mi
+                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.radiusMi} mi
               </Popup>
             </CircleMarker>
-          ))}
+          )))}
 
           {/* Metros: red gap pins (sized by population) or small green covered rings */}
           {metros.map((m) =>

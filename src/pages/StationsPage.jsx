@@ -4,6 +4,7 @@ import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { geocode } from '../lib/geocodeClient.js'
+import { stationStates, stationPins } from '../lib/geo.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
 const DOC_SLOTS = [
@@ -19,16 +20,15 @@ export default function StationsPage() {
   const [logging, setLogging] = useState(null) // station
   const [backups, setBackups] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [merging, setMerging] = useState(null) // target station
   const [busy, setBusy] = useState(false)
 
   // State filter (A→Z). Options come from the stations actually on file.
   const [stateFilter, setStateFilter] = useState('')
-  const states = useMemo(
-    () => [...new Set(stations.map((s) => (s.state || '').trim().toUpperCase()).filter(Boolean))].sort(),
-    [stations],
-  )
+  // A multi-location station counts under every state it has a pin in.
+  const states = useMemo(() => [...new Set(stations.flatMap(stationStates))].sort(), [stations])
   const visible = useMemo(() => {
-    const rows = stateFilter ? stations.filter((s) => (s.state || '').trim().toUpperCase() === stateFilter) : stations
+    const rows = stateFilter ? stations.filter((s) => stationStates(s).includes(stateFilter)) : stations
     // Sort by state, then company, so the list reads A→Z.
     return [...rows].sort((a, b) => (a.state || '').localeCompare(b.state || '') || a.company.localeCompare(b.company))
   }, [stations, stateFilter])
@@ -93,8 +93,15 @@ export default function StationsPage() {
                     <b>{s.company}</b>
                     {s.isMaster ? <span className="tag master-tag">master</span> : <span className="tag added-tag">added</span>}
                   </td>
-                  <td>{s.city}</td>
-                  <td><b>{s.state}</b></td>
+                  <td>
+                    {s.city}
+                    {stationPins(s).length > 1 && (
+                      <span className="tag added-tag" title={(s.serviceAreas || []).map((a) => a.label || `${a.city}, ${a.state}`).join(' · ')}>
+                        +{stationPins(s).length - 1} location{stationPins(s).length > 2 ? 's' : ''}
+                      </span>
+                    )}
+                  </td>
+                  <td><b>{stationStates(s).join(', ') || s.state}</b></td>
                   <td>{s.serviceRadiusMi} mi</td>
                   <td className="prodcell">
                     {PRODUCTS.filter((p) => s.products?.[p.key]).map((p) => (
@@ -108,6 +115,7 @@ export default function StationsPage() {
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {can(role, 'logService') && <button className="ghost small" onClick={() => setLogging(s)}>Log</button>}{' '}
                     {can(role, 'editStations') && <button className="ghost small" onClick={() => setEditing(s)}>Edit</button>}{' '}
+                    {can(role, 'deleteStations') && <button className="ghost small" onClick={() => setMerging(s)} title="Fold other records for this same company into this one">Merge</button>}{' '}
                     {can(role, 'deleteStations') && !s.isMaster && <button className="ghost small" onClick={() => removeStation(s)}>Remove</button>}
                   </td>
                 </tr>
@@ -121,6 +129,72 @@ export default function StationsPage() {
       {logging && <ServiceLogModal station={logging} onClose={() => setLogging(null)} />}
       {backups && <BackupsModal onClose={() => setBackups(false)} />}
       {importing && <ImportModal onClose={() => setImporting(false)} />}
+      {merging && <MergeModal target={merging} onClose={() => setMerging(null)} />}
+    </div>
+  )
+}
+
+// --- Merge duplicate records for one entity ----------------------------------
+
+const normCo = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+function MergeModal({ target, onClose }) {
+  const { stations, refresh } = useApp()
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  // Pre-select records whose company name matches the target (typical duplicates).
+  const [picked, setPicked] = useState(() => new Set(
+    stations.filter((s) => s.id !== target.id && !s.isMaster && normCo(s.company) === normCo(target.company)).map((s) => s.id),
+  ))
+  const candidates = stations
+    .filter((s) => s.id !== target.id)
+    .filter((s) => !q.trim() || normCo(s.company).includes(normCo(q)) || picked.has(s.id))
+    .sort((a, b) => (picked.has(b.id) - picked.has(a.id)) || a.company.localeCompare(b.company))
+    .slice(0, 40)
+  const toggle = (id) => setPicked((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  async function merge() {
+    const ids = [...picked]
+    if (!ids.length) return setError('Select at least one record to merge in.')
+    const names = stations.filter((s) => ids.includes(s.id)).map((s) => `${s.company} (${s.city}, ${s.state})`)
+    if (!confirm(`Merge ${ids.length} record${ids.length > 1 ? 's' : ''} into ${target.company}?\n\n${names.join('\n')}\n\nTheir locations become service areas of ${target.company}; contacts, service log and documents move over; the merged records are removed. A database snapshot can be restored from Backups if needed.`)) return
+    setBusy(true); setError(null)
+    try {
+      await api.mergeStations(target.id, ids)
+      await refresh()
+      onClose()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Merge into {target.company}</h3>
+        <p className="muted">
+          Keeps <b>{target.company}</b> ({target.city}, {target.state}) as the one record. Each selected
+          record's address becomes an <b>additional service area</b> with its own pin and radius; its
+          contacts, service-log entries and documents move over; then it is removed. Master records
+          can't be merged away — open the master and merge into it instead.
+        </p>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search other stations by company…" />
+        <div className="merge-list">
+          {candidates.map((s) => (
+            <label key={s.id} className={'merge-row' + (picked.has(s.id) ? ' on' : '') + (s.isMaster ? ' disabled' : '')}>
+              <input type="checkbox" checked={picked.has(s.id)} disabled={s.isMaster} onChange={() => toggle(s.id)} />
+              <span><b>{s.company}</b> <span className="muted">· {s.city}, {s.state} · {s.serviceRadiusMi} mi</span></span>
+              {s.isMaster && <span className="tag master-tag">master</span>}
+            </label>
+          ))}
+          {candidates.length === 0 && <div className="muted">No other stations match.</div>}
+        </div>
+        {error && <div className="error">{error}</div>}
+        <div className="modal-actions">
+          <button className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="primary" onClick={merge} disabled={busy || picked.size === 0}>
+            {busy ? 'Merging…' : `Merge ${picked.size || ''} into ${target.company}`}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -366,6 +440,7 @@ function StationForm({ station, onClose }) {
       products: { pumps: false, saltSystems: false, roboticCleaners: false, lights: false, filters: false, heatPumpElectrical: false, heatPumpRefrigerant: false },
       partsCategories: [],
       contacts: [],
+      serviceAreas: [],
     }
   )
   const [saving, setSaving] = useState(false)
@@ -380,6 +455,36 @@ function StationForm({ station, onClose }) {
     return { ...p, contacts }
   })
   const removeContact = (i) => setF((p) => ({ ...p, contacts: (p.contacts || []).filter((_, j) => j !== i) }))
+
+  // Additional service areas (extra pins for the same entity, each with its own radius).
+  const [areaMsg, setAreaMsg] = useState({})
+  const addArea = () => setF((p) => ({ ...p, serviceAreas: [...(p.serviceAreas || []), { label: '', address: '', city: '', state: '', zip: '', lat: null, lng: null, radiusMi: 25 }] }))
+  const setArea = (i, k, v) => setF((p) => {
+    const serviceAreas = [...(p.serviceAreas || [])]
+    // Editing the address invalidates the old pin so it gets re-located on save.
+    const reset = ['address', 'city', 'state', 'zip'].includes(k) ? { lat: null, lng: null } : {}
+    serviceAreas[i] = { ...serviceAreas[i], ...reset, [k]: v }
+    return { ...p, serviceAreas }
+  })
+  const removeArea = (i) => setF((p) => ({ ...p, serviceAreas: (p.serviceAreas || []).filter((_, j) => j !== i) }))
+  const areaQuery = (a) => [a.address, a.city, a.state, a.zip].filter(Boolean).join(', ')
+  async function locateArea(i) {
+    const a = f.serviceAreas[i]
+    const query = areaQuery(a)
+    if (!query.trim()) return setAreaMsg((m) => ({ ...m, [i]: 'Enter an address or city/state first.' }))
+    setAreaMsg((m) => ({ ...m, [i]: 'Locating…' }))
+    try {
+      const geo = await geocode(query)
+      setF((p) => {
+        const serviceAreas = [...(p.serviceAreas || [])]
+        serviceAreas[i] = { ...serviceAreas[i], lat: geo.lat, lng: geo.lng }
+        return { ...p, serviceAreas }
+      })
+      setAreaMsg((m) => ({ ...m, [i]: (geo.approximate ? '≈ ' : '✓ ') + (geo.label || '').slice(0, 60) }))
+    } catch (e) {
+      setAreaMsg((m) => ({ ...m, [i]: 'Could not locate: ' + e.message }))
+    }
+  }
 
   // Build the best geocoding query from the address parts (incl. zip).
   const geoQuery = () => [f.serviceAddress, f.city, f.state, f.zip].filter(Boolean).join(', ')
@@ -420,13 +525,32 @@ function StationForm({ station, onClose }) {
         return setError(`Could not geocode "${query}": ${err.message}. Enter lat/lng manually.`)
       }
     }
-    const { id, isMaster, perf, createdAt, ...editable } = f
+    // Additional areas: drop empty rows, geocode any that still lack a pin.
+    const serviceAreas = []
+    for (const a of f.serviceAreas || []) {
+      const query = areaQuery(a)
+      if (!query.trim() && a.lat == null) continue
+      let { lat: alat, lng: alng } = a
+      if (alat == null || alng == null) {
+        try {
+          setSaving(true)
+          const geo = await geocode(query)
+          alat = geo.lat; alng = geo.lng
+        } catch (err) {
+          setSaving(false)
+          return setError(`Could not locate service area "${query}": ${err.message}`)
+        }
+      }
+      serviceAreas.push({ ...a, lat: alat, lng: alng, radiusMi: parseInt(a.radiusMi, 10) || 25 })
+    }
+    const { id, isMaster, perf, createdAt, compliance, ...editable } = f
     const num = (v) => (v === '' || v == null ? null : Number(v))
     const payload = {
       ...editable, lat, lng, geocodePrecision: precision,
       serviceRadiusMi: parseInt(f.serviceRadiusMi, 10) || 25,
       totalTechnicians: num(f.totalTechnicians), epa608Techs: num(f.epa608Techs),
       contacts: (f.contacts || []).filter((c) => c.name || c.title || c.phone || c.email),
+      serviceAreas,
     }
     try {
       setSaving(true)
@@ -478,7 +602,7 @@ function StationForm({ station, onClose }) {
           </button>
           {geoMsg && <span className="muted">{geoMsg}</span>}
         </div>
-        <LocatePreview lat={parseFloat(f.lat)} lng={parseFloat(f.lng)} radiusMi={parseInt(f.serviceRadiusMi, 10) || 25} />
+        <LocatePreview lat={parseFloat(f.lat)} lng={parseFloat(f.lng)} radiusMi={parseInt(f.serviceRadiusMi, 10) || 25} areas={f.serviceAreas || []} />
         <details className="coords-details">
           <summary>Coordinates (auto-filled from the address — only adjust if a pin lands wrong)</summary>
           <div className="form-grid">
@@ -486,6 +610,29 @@ function StationForm({ station, onClose }) {
             <Field label="Longitude"><input value={f.lng ?? ''} onChange={(e) => set('lng', e.target.value)} placeholder="auto from address" /></Field>
           </div>
         </details>
+
+        <div className="label-row">Additional service areas <span className="muted">(same company, more locations — each gets its own pin & radius; contacts and documents are shared)</span></div>
+        <div className="contacts-list">
+          {(f.serviceAreas || []).map((a, i) => (
+            <div key={i}>
+              <div className="area-row">
+                <input placeholder="Label (e.g. Naples branch)" value={a.label || ''} onChange={(e) => setArea(i, 'label', e.target.value)} />
+                <input placeholder="Street address" value={a.address || ''} onChange={(e) => setArea(i, 'address', e.target.value)} />
+                <input placeholder="City" value={a.city || ''} onChange={(e) => setArea(i, 'city', e.target.value)} />
+                <input placeholder="ST" maxLength={2} value={a.state || ''} onChange={(e) => setArea(i, 'state', e.target.value.toUpperCase())} />
+                <input placeholder="Zip" value={a.zip || ''} onChange={(e) => setArea(i, 'zip', e.target.value)} />
+                <input type="number" min="1" title="Radius (miles)" value={a.radiusMi ?? 25} onChange={(e) => setArea(i, 'radiusMi', e.target.value)} />
+                <button type="button" className="ghost small" onClick={() => locateArea(i)} title="Locate on the map">📍</button>
+                <button type="button" className="ghost small" onClick={() => removeArea(i)} title="Remove this area">✕</button>
+              </div>
+              <div className="muted area-status">
+                {areaMsg[i] || (a.lat != null ? `✓ Pinned (${Number(a.lat).toFixed(3)}, ${Number(a.lng).toFixed(3)}) · ${a.radiusMi || 25} mi` : 'Not located yet — located automatically on save.')}
+              </div>
+            </div>
+          ))}
+          {(f.serviceAreas || []).length === 0 && <div className="muted">Single location. Add an area if this company also covers another region from a different address.</div>}
+        </div>
+        <button type="button" className="ghost small" onClick={addArea} style={{ marginTop: 8 }}>+ Add service area</button>
 
         <div className="label-row">Additional contacts <span className="muted">(who to address — beyond the primary contact above)</span></div>
         <div className="contacts-list">

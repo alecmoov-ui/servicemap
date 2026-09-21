@@ -178,6 +178,20 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
         }
       }
 
+      // Additional service areas without coordinates: geocode from their address.
+      if (Array.isArray(merged.serviceAreas)) {
+        for (const a of merged.serviceAreas) {
+          if (a.lat != null && a.lng != null) continue
+          const q = [a.address, a.city, a.state, a.zip].filter(Boolean).join(', ')
+          if (!q || geocodes >= 60) continue
+          geocodes++
+          const geo = await geocodeOne(q)
+          if (geo) { a.lat = geo.lat; a.lng = geo.lng }
+          else result.warnings.push({ row: rowNum, message: `Could not geocode service area "${q}" — imported without a pin.` })
+          await sleep(1100)
+        }
+      }
+
       const cols = stationToColumns(merged)
       if (existing) {
         const keys = Object.keys(cols)
@@ -252,6 +266,68 @@ stationsRouter.delete('/:id', requirePermission('deleteStations'), (req, res) =>
   db.prepare('DELETE FROM stations WHERE id = ?').run(req.params.id)
   logFromReq(req, { action: 'station.delete', entityType: 'station', entityId: req.params.id, summary: `Deleted station ${s.company}` })
   res.json({ ok: true })
+})
+
+// Merge several station records for ONE entity into a target: each source's location
+// becomes an additional service area on the target; contacts, service-log entries and
+// documents move over; sources are then deleted. Masters can never be sources (they
+// are never deleted) — make the master the target instead.
+stationsRouter.post('/:id/merge', requirePermission('deleteStations'), (req, res) => {
+  const target = getStation(req.params.id)
+  if (!target) return res.status(404).json({ error: 'Target station not found' })
+  const sourceIds = [...new Set((req.body?.sourceIds || []).map(String))].filter((id) => id !== target.id)
+  if (!sourceIds.length) return res.status(400).json({ error: 'Pick at least one other station to merge in' })
+  const sources = sourceIds.map((id) => getStation(id))
+  const missing = sourceIds.filter((_, i) => !sources[i])
+  if (missing.length) return res.status(404).json({ error: `Station not found: ${missing.join(', ')}` })
+  const masters = sources.filter((s) => s.is_master)
+  if (masters.length) {
+    return res.status(400).json({ error: `Master records cannot be merged away (${masters.map((m) => m.company).join(', ')}). Use the master as the target instead.` })
+  }
+
+  const t = rowToStation(target)
+  const areas = [...t.serviceAreas]
+  const contacts = [...t.contacts]
+  const contactKey = (c) => [c.name, c.phone, c.email].map((v) => String(v || '').trim().toLowerCase()).join('|')
+  const seen = new Set([contactKey({ name: t.primaryContact, phone: t.phone, email: t.email }), ...contacts.map(contactKey)])
+  const addContact = (c) => {
+    if (!(c.name || c.phone || c.email)) return
+    const k = contactKey(c)
+    if (seen.has(k)) return
+    seen.add(k)
+    contacts.push({ name: c.name || '', title: c.title || '', phone: c.phone || '', email: c.email || '' })
+  }
+  for (const row of sources) {
+    const s = rowToStation(row)
+    areas.push({
+      label: s.company !== t.company ? s.company : [s.city, s.state].filter(Boolean).join(', '),
+      address: s.serviceAddress || '', city: s.city || '', state: s.state || '', zip: s.zip || '',
+      lat: s.lat, lng: s.lng, radiusMi: s.serviceRadiusMi || 25,
+    })
+    areas.push(...s.serviceAreas)
+    addContact({ name: s.primaryContact, title: s.primaryContactTitle, phone: s.phone, email: s.email })
+    s.contacts.forEach(addContact)
+  }
+
+  db.transaction(() => {
+    const cols = stationToColumns({ serviceAreas: areas, contacts })
+    db.prepare("UPDATE stations SET service_areas = @service_areas, contacts = @contacts, updated_at = datetime('now') WHERE id = @id")
+      .run({ id: target.id, ...cols })
+    const moveEvents = db.prepare('UPDATE service_events SET station_id = ? WHERE station_id = ?')
+    const moveDocs = db.prepare('UPDATE station_documents SET station_id = ? WHERE station_id = ?')
+    const del = db.prepare('DELETE FROM stations WHERE id = ? AND is_master = 0')
+    for (const id of sourceIds) {
+      moveEvents.run(target.id, id)
+      moveDocs.run(target.id, id)
+      del.run(id)
+    }
+  })()
+
+  logFromReq(req, {
+    action: 'station.merge', entityType: 'station', entityId: target.id,
+    summary: `Merged ${sources.map((s) => `${s.company} (${s.city}, ${s.state})`).join('; ')} into ${target.company}`,
+  })
+  res.json(withDerived(getStation(target.id), computePerfMap()[target.id]))
 })
 
 // ---- Service log (manual performance entry) -------------------------------
