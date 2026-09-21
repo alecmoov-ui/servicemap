@@ -161,6 +161,10 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('stations', 'contacts', "TEXT NOT NULL DEFAULT '[]'") // extra named contacts (JSON)
 ensureColumn('stations', 'zip', 'TEXT')
+// Additional service areas (JSON array): extra pins for one entity that covers
+// several regions. Each: { label, address, city, state, zip, lat, lng, radiusMi }.
+// The station's own address/lat/lng/radius is its PRIMARY area.
+ensureColumn('stations', 'service_areas', "TEXT NOT NULL DEFAULT '[]'")
 
 // Split the old single `heatPumps` product flag into electrical + refrigerant.
 // Idempotent: only touches station rows that still carry the legacy key.
@@ -200,6 +204,7 @@ export function rowToStation(r, perf) {
     lng: r.lng,
     geocodePrecision: r.geocode_precision,
     serviceRadiusMi: r.service_radius_mi,
+    serviceAreas: JSON.parse(r.service_areas || '[]'),
     products: JSON.parse(r.products || '{}'),
     taxId: r.tax_id,
     primaryContact: r.primary_contact,
@@ -234,6 +239,23 @@ export function rowToStation(r, perf) {
   }
 }
 
+// Keep only well-formed areas; coerce numbers so the map never gets strings.
+export function normalizeAreas(areas) {
+  const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v))
+  return (Array.isArray(areas) ? areas : [])
+    .map((a) => ({
+      label: String(a.label || '').trim(),
+      address: String(a.address || '').trim(),
+      city: String(a.city || '').trim(),
+      state: String(a.state || '').trim().toUpperCase(),
+      zip: String(a.zip || '').trim(),
+      lat: num(a.lat),
+      lng: num(a.lng),
+      radiusMi: Math.max(1, parseInt(a.radiusMi, 10) || 25),
+    }))
+    .filter((a) => a.address || a.city || a.lat != null)
+}
+
 // Map an API-shaped station (partial) to DB columns for insert/update.
 export function stationToColumns(s) {
   const c = {}
@@ -252,6 +274,7 @@ export function stationToColumns(s) {
   if (s.products !== undefined) c.products = JSON.stringify(s.products)
   if (s.partsCategories !== undefined) c.parts_categories = JSON.stringify(s.partsCategories)
   if (s.contacts !== undefined) c.contacts = JSON.stringify(s.contacts)
+  if (s.serviceAreas !== undefined) c.service_areas = JSON.stringify(normalizeAreas(s.serviceAreas))
   if (s.contractOnFile !== undefined) c.contract_on_file = s.contractOnFile ? 1 : 0
   if (s.w9OnFile !== undefined) c.w9_on_file = s.w9OnFile ? 1 : 0
   if (s.afterHours !== undefined) c.after_hours = s.afterHours ? 1 : 0

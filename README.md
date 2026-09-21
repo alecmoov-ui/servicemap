@@ -115,6 +115,14 @@ radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:
   per-station, e.g. 15 / 25 / 60 mi). Capture a **primary contact plus any number of
   additional named contacts** (owner, dispatch, billing…). Then **upload documents**:
   Service Contract, Schedule A, HVAC License, Proof of Insurance.
+- **Multi-location companies:** one station can have **additional service areas** — extra
+  pins, each with its own address and radius — under the same registration, contacts,
+  documents and service log. The Map matches on any pin (distance = nearest pin), Zone
+  Coverage counts every circle, and the list shows all states covered.
+- **Merge** duplicate records for the same company (e.g. one entered per branch): pick the
+  survivor → **Merge** → tick the duplicates. Their locations become service areas; contacts,
+  service-log entries and documents move over; the duplicates are removed. Master records
+  are never removed — use the master as the survivor.
 - **Export CSV** of all stations (data backup / Excel) and create **database snapshots**.
 
 Editing is **role-gated and enforced on the server**: Dispatch is read-only on the list
@@ -126,6 +134,9 @@ station immediately appears in Map, Zone Coverage, and Analytics.
 Maintain your station list in Excel and push updates in bulk (**Stations → Import file**):
 - **Round-trip:** the **Export CSV** *is* the template (or grab a blank one). Edit/add rows
   in Excel, then upload `.xlsx` or `.csv`.
+- **Additional service areas** travel in one column, one area per line:
+  `Label | Address | City | ST | Radius mi | Lat | Lng` (blank Lat/Lng are geocoded on
+  import; a blank cell leaves the station's areas unchanged).
 - **Matching:** rows match on the **`ID`** column — blank `ID` creates a new station (the
   address is auto-geocoded); a filled `ID` updates that station. Fallback: blank `ID` with
   an exact **Company** match updates the existing record (keep company names unique).

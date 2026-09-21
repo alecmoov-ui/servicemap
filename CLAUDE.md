@@ -43,15 +43,21 @@ change that makes CI red.**
    delete route rejects them. Don't add a bypass.
 3. **Performance is derived, not stored as counters.** `computePerfMap()` aggregates
    `service_events`. Don't add denormalized counter columns back to `stations`.
-4. **Adding/editing a station or logging an event must immediately reflect in Map, Zone
+4. **Stations can have several pins.** The row's own address/lat/lng/radius is the PRIMARY
+   area; `service_areas` (JSON) holds extra `{label,address,city,state,zip,lat,lng,radiusMi}`
+   pins. All geography on the client goes through `stationPins()/stationStates()/
+   coveringPin()` in `src/lib/geo.js` — never read `s.lat/s.lng` directly for search,
+   map or coverage. `/stations/:id/merge` folds duplicates into one record (moves events,
+   docs, contacts; sources become areas; masters are never sources).
+5. **Adding/editing a station or logging an event must immediately reflect in Map, Zone
    Coverage, and Analytics** — they all read `stations` from `AppContext`, and mutations
    call `loadData()`. Keep that single-source-of-truth flow.
-5. **Never commit secrets, the database, uploads, or backups.** `.env` and
+6. **Never commit secrets, the database, uploads, or backups.** `.env` and
    `server/data/` are gitignored.
-6. **Documents** are stored on disk under `UPLOAD_DIR` with metadata in
+7. **Documents** are stored on disk under `UPLOAD_DIR` with metadata in
    `station_documents`; downloads are auth-gated and streamed. Keep the persistent disk
    in mind for deployment.
-7. **Bulk import** (`importStations.js` + the `/stations/import` route) and **CSV export**
+8. **Bulk import** (`importStations.js` + the `/stations/import` route) and **CSV export**
    share one column spec (`FIELD_COLUMNS`/`PRODUCT_COLUMNS`) so the export round-trips as
    the import template — keep them in sync. Every import takes a DB snapshot first
    (`snapshot.js`) and records to `station_imports`. Match by `id` then company name; never

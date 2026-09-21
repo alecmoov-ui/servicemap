@@ -264,3 +264,77 @@ test('activity log: admin/dtm only, records service-log entries', async () => {
   assert.equal(log.status, 200)
   assert.ok(log.data.some((e) => e.action === 'service.log' && e.actor === 'dtm@moovpool.com'))
 })
+
+test('multi-location stations: serviceAreas round-trip, export column, import parsing', async () => {
+  const token = await tokenFor('admin@moovpool.com')
+  const areas = [{ label: 'Naples branch', address: '1 Main St', city: 'Naples', state: 'fl', zip: '', lat: 26.14, lng: -81.79, radiusMi: 30 }]
+  const created = await api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'Two Town Pools', city: 'Fort Myers', state: 'FL', lat: 26.64, lng: -81.87, serviceRadiusMi: 25, products: { pumps: true }, serviceAreas: areas },
+  })
+  assert.equal(created.status, 201)
+  assert.equal(created.data.serviceAreas.length, 1)
+  assert.equal(created.data.serviceAreas[0].state, 'FL') // normalized
+  assert.equal(created.data.serviceAreas[0].radiusMi, 30)
+
+  // Update leaves areas untouched when not sent; replaces them when sent.
+  const upd1 = await api(`/api/stations/${created.data.id}`, { method: 'PUT', token, body: { phone: '555-0100' } })
+  assert.equal(upd1.data.serviceAreas.length, 1)
+  const upd2 = await api(`/api/stations/${created.data.id}`, { method: 'PUT', token, body: { serviceAreas: [] } })
+  assert.equal(upd2.data.serviceAreas.length, 0)
+
+  // Export carries the areas column; import parses it (lat/lng given, so no geocoding).
+  await api(`/api/stations/${created.data.id}`, { method: 'PUT', token, body: { serviceAreas: areas } })
+  const csvRes = await fetch(base + '/api/stations/export.csv', { headers: { Authorization: `Bearer ${token}` } })
+  const csv = await csvRes.text()
+  assert.match(csv, /Additional Service Areas/)
+  assert.match(csv, /Naples branch \| 1 Main St \| Naples \| FL \| 30 mi \| 26.14 \| -81.79/)
+
+  const importCsv = [
+    'ID,Company,City,State,Lat,Lng,Additional Service Areas',
+    `${created.data.id},Two Town Pools,Fort Myers,FL,26.64,-81.87,"Cape Coral | 9 Pine Rd | Cape Coral | FL | 20 mi | 26.56 | -81.95\nPunta Gorda |  | Punta Gorda | FL | 15 mi | 26.93 | -82.05"`,
+  ].join('\n')
+  const fd = new FormData()
+  fd.append('file', new Blob([importCsv], { type: 'text/csv' }), 'areas.csv')
+  const imp = await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+  assert.equal((await imp.json()).updated, 1)
+  const after = (await api('/api/stations', { token })).data.find((s) => s.id === created.data.id)
+  assert.equal(after.serviceAreas.length, 2)
+  assert.equal(after.serviceAreas[1].city, 'Punta Gorda')
+  assert.equal(after.serviceAreas[1].radiusMi, 15)
+})
+
+test('merge: folds duplicate records into one station; masters cannot be merged away; view-only denied', async () => {
+  const token = await tokenFor('admin@moovpool.com')
+  const mk = (city, lat, lng, extra = {}) => api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'Pool Cool of FL', city, state: 'FL', lat, lng, serviceRadiusMi: 25, products: { pumps: true }, ...extra },
+  })
+  const target = (await mk('Tampa', 27.95, -82.46, { primaryContact: 'Ann', phone: '555-1', email: 'ann@poolcool.test' })).data
+  const dupA = (await mk('Orlando', 28.54, -81.38, { primaryContact: 'Bob', phone: '555-2', email: 'bob@poolcool.test', contacts: [{ name: 'Cy', title: 'Tech', phone: '555-3', email: '' }] })).data
+  const dupB = (await mk('Miami', 25.77, -80.19, { serviceRadiusMi: 40, primaryContact: 'Ann', phone: '555-1', email: 'ann@poolcool.test' })).data
+  // A service-log entry on a duplicate must move to the survivor.
+  await api(`/api/stations/${dupA.id}/service-events`, { method: 'POST', token, body: { accepted: true, completed: true, completionDays: 2 } })
+
+  // View-only roles cannot merge; a master cannot be a source.
+  const salesToken = await tokenFor('sales@moovpool.com')
+  assert.equal((await api(`/api/stations/${target.id}/merge`, { method: 'POST', token: salesToken, body: { sourceIds: [dupA.id] } })).status, 403)
+  const masterAsSource = await api(`/api/stations/${target.id}/merge`, { method: 'POST', token, body: { sourceIds: ['st_05'] } })
+  assert.equal(masterAsSource.status, 400)
+  assert.ok((await api('/api/stations', { token })).data.some((s) => s.id === 'st_05')) // master untouched
+
+  const merged = await api(`/api/stations/${target.id}/merge`, { method: 'POST', token, body: { sourceIds: [dupA.id, dupB.id, target.id] } })
+  assert.equal(merged.status, 200)
+  // Two new service areas, with each duplicate's own radius.
+  assert.equal(merged.data.serviceAreas.length, 2)
+  assert.deepEqual(merged.data.serviceAreas.map((a) => a.city).sort(), ['Miami', 'Orlando'])
+  assert.equal(merged.data.serviceAreas.find((a) => a.city === 'Miami').radiusMi, 40)
+  // Contacts: Bob + Cy added; Ann (same as target's primary) not duplicated.
+  assert.deepEqual(merged.data.contacts.map((c) => c.name).sort(), ['Bob', 'Cy'])
+  // Service log moved → performance is now on the survivor.
+  assert.equal(merged.data.perf.jobsCompleted, 1)
+  // Duplicates are gone.
+  const all = (await api('/api/stations', { token })).data
+  assert.ok(!all.some((s) => s.id === dupA.id || s.id === dupB.id))
+  assert.equal(all.filter((s) => s.company === 'Pool Cool of FL').length, 1)
+})

@@ -79,6 +79,29 @@ export const CONTACT_COLUMNS = [
   { idx: 1, field: 'email', label: 'Contact 3 Email' },
 ]
 
+// Additional service areas (multi-location entities) round-trip in ONE column, one
+// area per line, pipe-separated: `Label | Address | City | ST | Radius mi | Lat | Lng`.
+// Lat/Lng may be blank (geocoded on import). Blank column on import = no change.
+export const AREAS_COLUMN = 'Additional Service Areas'
+export function areasToCell(areas) {
+  return (areas || [])
+    .map((a) => [a.label, a.address, a.city, a.state, a.radiusMi != null ? `${a.radiusMi} mi` : '', a.lat ?? '', a.lng ?? '']
+      .map((v) => String(v ?? '').replace(/\|/g, '/').trim()).join(' | '))
+    .join('\n')
+}
+export function cellToAreas(text) {
+  return String(text ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [label = '', address = '', city = '', state = '', radius = '', lat = '', lng = ''] = line.split('|').map((v) => v.trim())
+      const num = (v) => (v === '' || Number.isNaN(Number(v)) ? null : Number(v))
+      return { label, address, city, state: state.toUpperCase(), zip: '', radiusMi: parseInt(radius, 10) || 25, lat: num(lat), lng: num(lng) }
+    })
+    .filter((a) => a.address || a.city || a.lat != null)
+}
+
 // Export-only, ignored on import (derived from the service log).
 export const PERF_COLUMNS = [
   ['Dispatch Requests', (s) => s.perf?.dispatchRequests],
@@ -90,6 +113,7 @@ export const PERF_COLUMNS = [
 export const EXPORT_HEADER = [
   ...FIELD_COLUMNS.map((c) => c[0]),
   ...CONTACT_COLUMNS.map((c) => c.label),
+  AREAS_COLUMN,
   ...PRODUCT_COLUMNS.map((c) => c[0]),
   ...PERF_COLUMNS.map((c) => c[0]),
 ]
@@ -109,7 +133,7 @@ export function stationToRow(s) {
   const contacts = CONTACT_COLUMNS.map((c) => cell(s.contacts?.[c.idx]?.[c.field]))
   const products = PRODUCT_COLUMNS.map(([, key]) => (s.products?.[key] ? 'yes' : ''))
   const perf = PERF_COLUMNS.map(([, fn]) => cell(fn(s)))
-  return [...fields, ...contacts, ...products, ...perf]
+  return [...fields, ...contacts, areasToCell(s.serviceAreas), ...products, ...perf]
 }
 
 // ---- Import parsing -------------------------------------------------------
@@ -130,6 +154,8 @@ const HEADER_LOOKUP = (() => {
   for (const c of CONTACT_COLUMNS) {
     m.set(norm(c.label), { kind: 'contact', idx: c.idx, field: c.field })
   }
+  m.set(norm(AREAS_COLUMN), { kind: 'areas' })
+  m.set(norm('serviceAreas'), { kind: 'areas' })
   return m
 })()
 
@@ -196,6 +222,9 @@ export function rowToPatch(rowObj) {
     if (!def) continue
     if (def.kind === 'product') {
       products[def.key] = truthy(raw)
+    } else if (def.kind === 'areas') {
+      // Blank cell = leave areas unchanged; any text replaces the list.
+      if (String(raw ?? '').trim()) patch.serviceAreas = cellToAreas(raw)
     } else if (def.kind === 'contact') {
       contactColsPresent = true
       contactsTmp[def.idx] = contactsTmp[def.idx] || {}

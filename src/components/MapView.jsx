@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-le
 import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { starRating } from '../lib/ratings.js'
+import { stationPins, pinLabel } from '../lib/geo.js'
 
 // Colored pin icons (no local image assets needed).
 function pin(color) {
@@ -38,10 +39,8 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
   // Stations whose coverage circle should be drawn even without a search.
   const coversProduct = (s) => coverageProduct && s.products?.[coverageProduct]
   const focusPoints = consumer
-    ? [consumer, ...matches]
-    : coverageProduct
-      ? stations.filter(coversProduct).map((s) => ({ lat: s.lat, lng: s.lng }))
-      : stations.map((s) => ({ lat: s.lat, lng: s.lng }))
+    ? [consumer, ...matches.map((m) => m.viaPin || m)]
+    : (coverageProduct ? stations.filter(coversProduct) : stations).flatMap(stationPins)
 
   return (
     <MapContainer center={[39.5, -98.35]} zoom={4} className="map" scrollWheelZoom>
@@ -52,12 +51,13 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
         const isMatch = matchIds.has(s.id)
         const isSel = s.id === selectedId
         const showCircle = isMatch || coversProduct(s)
-        return (
-          <div key={s.id}>
+        // One pin + circle per location; all share the station's identity/contacts.
+        return stationPins(s).map((p) => (
+          <div key={p.key}>
             {showCircle && (
               <Circle
-                center={[s.lat, s.lng]}
-                radius={s.serviceRadiusMi * 1609.34}
+                center={[p.lat, p.lng]}
+                radius={p.radiusMi * 1609.34}
                 pathOptions={
                   isSel
                     ? { color: '#e0701a', weight: 1, fillOpacity: 0.12 }
@@ -68,14 +68,15 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
               />
             )}
             <Marker
-              position={[s.lat, s.lng]}
+              position={[p.lat, p.lng]}
               icon={isSel ? PIN.selected : isMatch ? PIN.match : PIN.station}
               eventHandlers={{ click: () => onSelect?.(s.id) }}
             >
               <Popup>
                 <strong>{s.company}</strong>
                 <br />
-                {s.city}, {s.state} · {s.serviceRadiusMi} mi radius
+                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.radiusMi} mi radius
+                {!p.primary && <><br /><em>Additional location of {s.city}, {s.state}</em></>}
                 <br />
                 {starRating(s.perf).toFixed(1)}★ · {s.phone}
                 <br />
@@ -83,7 +84,7 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
               </Popup>
             </Marker>
           </div>
-        )
+        ))
       })}
 
       {consumer && (

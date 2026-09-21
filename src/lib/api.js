@@ -44,6 +44,7 @@ export const api = {
   createStation: (s) => request('/stations', { method: 'POST', body: s }),
   updateStation: (id, patch) => request(`/stations/${id}`, { method: 'PUT', body: patch }),
   deleteStation: (id) => request(`/stations/${id}`, { method: 'DELETE' }),
+  mergeStations: (targetId, sourceIds) => request(`/stations/${targetId}/merge`, { method: 'POST', body: { sourceIds } }),
 
   // Service log (manual performance entry)
   getServiceEvents: (id) => request(`/stations/${id}/service-events`),
