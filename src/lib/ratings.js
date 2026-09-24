@@ -26,12 +26,13 @@ export function completionRate(perf) {
   return perf.jobsCompleted / perf.dispatchAccepted
 }
 
-// Composite 0–100 reliability score. New stations (no history) get a neutral
-// baseline so they are not buried — they surface for vetting opportunities.
+// Composite 0–100 reliability score, derived purely from the Service Log. A station
+// with no logged tickets scores 0 — scores are earned, not assumed. With equal
+// scores the dispatch list falls back to distance.
 export function reliabilityScore(perf) {
   const acc = acceptanceRate(perf)
   const comp = completionRate(perf)
-  if (acc == null) return 60 // unproven baseline
+  if (acc == null) return 0 // no history yet
   const volumeBoost = Math.min((perf.dispatchRequests || 0) / 20, 1) * 10
   return Math.round(acc * 55 + (comp ?? 0.8) * 35 + volumeBoost)
 }
