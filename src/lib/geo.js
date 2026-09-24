@@ -49,3 +49,16 @@ export function coveringPin(point, s) {
 
 // Short label for a pin: "Naples branch" / "Naples, FL".
 export const pinLabel = (pin) => pin.label || [pin.city, pin.state].filter(Boolean).join(', ') || 'Service area'
+
+// Number of map pins across a set of stations (primary + additional areas). With
+// `state`, only pins in that state are counted (for the filtered station list).
+export const locationCount = (stations, state) =>
+  stations.reduce((n, s) => n + stationPins(s).filter((p) => !state || String(p.state || '').toUpperCase() === state).length, 0)
+
+// "58 locations (55 stations)" — pins first (true service-coverage count), then the
+// number of distinct station records in parentheses.
+export function countLabel(stations, state) {
+  const pins = locationCount(stations, state)
+  const n = stations.length
+  return `${pins} location${pins !== 1 ? 's' : ''} (${n} station${n !== 1 ? 's' : ''})`
+}

@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup } from 're
 import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { useStations } from '../lib/useStore.js'
-import { haversineMiles, stationPins, stationStates, pinLabel } from '../lib/geo.js'
+import { haversineMiles, stationPins, stationStates, pinLabel, locationCount } from '../lib/geo.js'
 import { PRODUCTS } from '../lib/ratings.js'
 import { METROS } from '../data/metros.js'
 
@@ -87,9 +87,9 @@ export default function CoveragePage() {
           </div>
 
           <div className="cov-kpis">
-            <div className="cov-kpi">
-              <b>{stations.length}</b>
-              <span>stations</span>
+            <div className="cov-kpi" title="Map pins providing coverage (stations with several service areas count once per pin)">
+              <b>{locationCount(stations)} <small>({stations.length})</small></b>
+              <span>locations (stations)</span>
             </div>
             <div className="cov-kpi">
               <b>{coveredCount}/{metros.length}</b>

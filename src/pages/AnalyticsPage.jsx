@@ -6,6 +6,7 @@ import {
 import { useStations } from '../lib/useStore.js'
 import { reliabilityScore, acceptanceRate, completionRate, PRODUCTS } from '../lib/ratings.js'
 import { complianceClass, complianceLabel, issueText } from '../lib/compliance.js'
+import { locationCount } from '../lib/geo.js'
 
 export default function AnalyticsPage() {
   const stations = useStations()
@@ -77,7 +78,10 @@ export default function AnalyticsPage() {
   return (
     <div className="analytics">
       <div className="kpis">
-        <Kpi label="Active stations" value={stations.filter((s) => s.status === 'active').length} />
+        <Kpi
+          label="Active locations (stations)"
+          value={<>{locationCount(stations.filter((s) => s.status === 'active'))} <small>({stations.filter((s) => s.status === 'active').length})</small></>}
+        />
         <Kpi label="Dispatch requests" value={totals.req} />
         <Kpi label="Acceptance rate" value={acc + '%'} />
         <Kpi label="Completion rate" value={comp + '%'} />

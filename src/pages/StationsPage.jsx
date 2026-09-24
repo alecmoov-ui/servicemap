@@ -4,7 +4,7 @@ import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { geocode } from '../lib/geocodeClient.js'
-import { stationStates, stationPins } from '../lib/geo.js'
+import { stationStates, stationPins, countLabel } from '../lib/geo.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
 const DOC_SLOTS = [
@@ -60,7 +60,7 @@ export default function StationsPage() {
         <div className="master-head">
           <h3>
             Master station list{' '}
-            <span className="muted">({stateFilter ? `${visible.length} of ${stations.length}` : stations.length})</span>
+            <span className="muted">{stateFilter ? `${countLabel(visible, stateFilter)} in ${stateFilter} · ${countLabel(stations)} total` : countLabel(stations)}</span>
           </h3>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select className="state-filter" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} title="Filter by state">
