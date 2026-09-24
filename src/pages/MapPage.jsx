@@ -3,7 +3,7 @@ import MapView from '../components/MapView.jsx'
 import { useStations } from '../lib/useStore.js'
 import { api } from '../lib/api.js'
 import { geocode } from '../lib/geocodeClient.js'
-import { coveringPin, pinLabel, stationPins } from '../lib/geo.js'
+import { coveringPin, pinLabel, stationPins, countLabel } from '../lib/geo.js'
 import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completionRate } from '../lib/ratings.js'
 
 // Built-in example service locations (coordinates included) so the search flow —
@@ -29,8 +29,8 @@ export default function MapPage() {
   const [showCoverage, setShowCoverage] = useState(false)
 
   // Stations whose coverage circles overlay the map (the selected product's network).
-  const coverageCount = useMemo(
-    () => (showCoverage ? stations.filter((s) => s.products?.[product]).length : 0),
+  const coverageLabel = useMemo(
+    () => (showCoverage ? countLabel(stations.filter((s) => s.products?.[product])) : ''),
     [showCoverage, stations, product]
   )
 
@@ -119,7 +119,7 @@ export default function MapPage() {
             <input type="checkbox" checked={showCoverage} onChange={(e) => setShowCoverage(e.target.checked)} />
             <span>
               Show all <b>{PRODUCTS.find((p) => p.key === product).label}</b> coverage on the map
-              {showCoverage ? ` (${coverageCount} station${coverageCount !== 1 ? 's' : ''})` : ''}
+              {showCoverage ? ` — ${coverageLabel}` : ''}
             </span>
           </label>
         </div>
