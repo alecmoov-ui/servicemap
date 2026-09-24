@@ -91,7 +91,6 @@ export default function StationsPage() {
                 <tr key={s.id}>
                   <td>
                     <b>{s.company}</b>
-                    {s.isMaster ? <span className="tag master-tag">master</span> : <span className="tag added-tag">added</span>}
                   </td>
                   <td>
                     {s.city}

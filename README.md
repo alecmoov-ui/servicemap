@@ -160,7 +160,7 @@ role. Guardrails prevent deleting your own account or removing the last admin.
 ### Roles & reliability
 Permissions live in `server/src/auth.js` (enforced) and `src/lib/roles.js` (UI gating).
 The 0–100 reliability score (`src/lib/ratings.js`) blends acceptance, completion, and
-volume; new stations get a neutral baseline so they still surface. Seed performance
+volume; a station with no logged tickets scores 0 (equal scores rank by distance). Seed performance
 numbers are demo values; real numbers accrue as the team logs events.
 
 ---
