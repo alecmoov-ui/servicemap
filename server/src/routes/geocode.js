@@ -13,7 +13,7 @@ geocodeRouter.get('/', async (req, res) => {
   const q = (req.query.q || '').toString().trim()
   if (!q) return res.status(400).json({ error: 'Missing query' })
   try {
-    const out = await geocodeOne(q)
+    const out = await geocodeOne(q, req.query.country === 'CA' ? 'CA' : 'US')
     if (!out) return res.status(404).json({ error: 'No match found for that address.' })
     res.json(out)
   } catch (err) {

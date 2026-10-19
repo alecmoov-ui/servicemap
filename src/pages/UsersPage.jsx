@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { api } from '../lib/api.js'
 import { useApp } from '../lib/AppContext.jsx'
 import { ROLES, CAPABILITIES } from '../lib/roles.js'
+import { REGIONS, region as regionInfo } from '../lib/units.js'
 
 // User management (admin + territory manager; the API enforces `manageUsers`).
 // Accounts are created here with a permanent username (email) + password.
@@ -42,14 +43,15 @@ export default function UsersPage() {
         </div>
         <p className="muted" style={{ marginTop: -4 }}>
           Each user signs in with the email and password you set here. Passwords are stored
-          hashed and can't be viewed afterwards — use <b>Edit</b> to set a new one.
+          hashed and can't be viewed afterwards — use <b>Edit</b> to set a new one. <b>Country</b> is
+          the user's home region: their app opens on that map (they can still switch in the header).
         </p>
         {error && <div className="error">{error}</div>}
 
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr><th>Name</th><th>Email (username)</th><th>Role</th><th>Created</th><th></th></tr>
+              <tr><th>Name</th><th>Email (username)</th><th>Role</th><th>Country</th><th>Created</th><th></th></tr>
             </thead>
             <tbody>
               {users.map((u) => (
@@ -57,6 +59,7 @@ export default function UsersPage() {
                   <td><b>{u.name}</b>{u.id === user.id && <span className="tag added-tag">you</span>}</td>
                   <td>{u.email}</td>
                   <td><span className="badge active">{ROLES[u.role]?.label || u.role}</span></td>
+                  <td title="Home region — the map this user's app opens on">{regionInfo(u.country).flag} {regionInfo(u.country).label}</td>
                   <td className="muted">{u.createdAt ? String(u.createdAt).slice(0, 10) : '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="ghost small" onClick={() => setEditing(u)}>Edit</button>{' '}
@@ -108,7 +111,7 @@ export default function UsersPage() {
 
 function UserForm({ user, onClose, onSaved }) {
   const isNew = !user
-  const [f, setF] = useState(user || { name: '', email: '', role: 'sales' })
+  const [f, setF] = useState(user ? { ...user, country: user.country || 'US' } : { name: '', email: '', role: 'sales', country: 'US' })
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState(null)
@@ -120,9 +123,9 @@ function UserForm({ user, onClose, onSaved }) {
     setError(null)
     try {
       if (isNew) {
-        await api.createUser({ name: f.name, email: f.email, role: f.role, password })
+        await api.createUser({ name: f.name, email: f.email, role: f.role, country: f.country, password })
       } else {
-        const patch = { name: f.name, role: f.role }
+        const patch = { name: f.name, role: f.role, country: f.country }
         if (password) patch.password = password
         await api.updateUser(user.id, patch)
       }
@@ -154,6 +157,12 @@ function UserForm({ user, onClose, onSaved }) {
             ))}
           </select>
           <small className="muted">{ROLES[f.role]?.blurb}</small>
+        </label>
+        <label className="field">
+          <span>Country (home region — which map the app opens on)</span>
+          <select value={f.country} onChange={(e) => set('country', e.target.value)}>
+            {REGIONS.map((r) => <option key={r.key} value={r.key}>{r.flag} {r.label}</option>)}
+          </select>
         </label>
         <label className="field">
           <span>{isNew ? 'Password' : 'New password (leave blank to keep current)'}</span>

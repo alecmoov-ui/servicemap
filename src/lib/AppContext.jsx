@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useState } from 'react'
+import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { api, getToken, setToken } from './api.js'
 
 const Ctx = createContext(null)
@@ -6,8 +6,13 @@ const Ctx = createContext(null)
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [stations, setStations] = useState([])
+  const [allStations, setStations] = useState([])
   const [dataLoading, setDataLoading] = useState(false)
+  // Active region (US | CA). Every page shows one region's network at a time; it
+  // opens on the signed-in user's home country and can be flipped in the header.
+  const [region, setRegion] = useState('US')
+  useEffect(() => { if (user?.country) setRegion(user.country) }, [user?.id, user?.country])
+  const stations = useMemo(() => allStations.filter((s) => (s.country || 'US') === region), [allStations, region])
   const [error, setError] = useState(null)
 
   const loadData = useCallback(async () => {
@@ -97,7 +102,10 @@ export function AppProvider({ children }) {
     login,
     logout,
     changePassword,
-    stations,
+    stations, // active region only — what Map, Coverage, Analytics, Stations show
+    allStations,
+    region,
+    setRegion,
     dataLoading,
     error,
     refresh: loadData,

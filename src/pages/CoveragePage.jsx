@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react'
 import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup } from 'react-leaflet'
 import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
-import { useStations } from '../lib/useStore.js'
+import { useStations, useApp } from '../lib/useStore.js'
+import { fmtDist, fmtRadius, region as regionInfo } from '../lib/units.js'
 import { haversineMiles, stationPins, stationStates, pinLabel, locationCount } from '../lib/geo.js'
 import { PRODUCTS } from '../lib/ratings.js'
-import { METROS } from '../data/metros.js'
+import { METROS_BY_REGION } from '../data/metros.js'
 
 const FILTERS = [{ key: 'all', label: 'All products' }, ...PRODUCTS]
 
@@ -21,6 +22,9 @@ function gapIcon(pop) {
 }
 
 export default function CoveragePage() {
+  const { region } = useApp()
+  const info = regionInfo(region)
+  const METROS = METROS_BY_REGION[region]
   const [product, setProduct] = useState('all')
   const all = useStations().filter((s) => s.status === 'active')
 
@@ -50,7 +54,7 @@ export default function CoveragePage() {
       }
       return { ...m, nearest, nearestStation, coveringCount, covered: coveringCount > 0 }
     })
-  }, [stations])
+  }, [stations, METROS])
 
   const gaps = useMemo(
     () => metros.filter((m) => !m.covered).sort((a, b) => b.pop - a.pop),
@@ -112,7 +116,8 @@ export default function CoveragePage() {
           <div className="results-head">
             🎯 Top recruiting targets — uncovered metros, by population
           </div>
-          {gaps.length === 0 && <div className="empty">Every tracked metro is covered for this filter.</div>}
+          {gaps.length === 0 && stations.length > 0 && <div className="empty">Every tracked metro is covered for this filter.</div>}
+          {stations.length === 0 && <div className="empty">No {info.label} stations yet — add them on the Stations tab.</div>}
           {gaps.map((m) => (
             <div key={m.city} className="gap-row">
               <div className="gap-main">
@@ -120,13 +125,13 @@ export default function CoveragePage() {
                 <span className="gap-pop">{m.pop.toFixed(1)}M</span>
               </div>
               <div className="muted">
-                Nearest station {m.nearest === Infinity ? '—' : Math.round(m.nearest) + ' mi'} away
+                Nearest station {m.nearest === Infinity ? '—' : fmtDist(m.nearest, region)} away
                 {m.nearestStation ? ` (${m.nearestStation.company})` : ''}
               </div>
             </div>
           ))}
 
-          <div className="results-head" style={{ marginTop: 18 }}>Stations by state</div>
+          <div className="results-head" style={{ marginTop: 18 }}>Stations by {info.stateLabel.toLowerCase()}</div>
           <div className="state-coverage">
             {byState.map(([st, n]) => (
               <span key={st} className="state-chip">{st} <b>{n}</b></span>
@@ -136,7 +141,7 @@ export default function CoveragePage() {
       </aside>
 
       <div className="map-pane">
-        <MapContainer center={[39.5, -96]} zoom={4} className="map" scrollWheelZoom>
+        <MapContainer key={region} center={info.home.center} zoom={info.home.zoom} className="map" scrollWheelZoom>
           <TileLayer {...TILE_OPTIONS} />
 
           {/* Density layer: overlapping radii shade darker where coverage is redundant */}
@@ -158,7 +163,7 @@ export default function CoveragePage() {
               <Popup>
                 <strong>{s.company}</strong>
                 <br />
-                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.radiusMi} mi
+                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {fmtRadius(p.radiusMi, region)}
               </Popup>
             </CircleMarker>
           )))}
@@ -182,7 +187,7 @@ export default function CoveragePage() {
                 <Popup>
                   <strong>{m.city}, {m.state}</strong> · {m.pop}M people
                   <br />❌ Gap — no {product === 'all' ? 'service' : FILTERS.find((f) => f.key === product).label} coverage
-                  <br />Nearest: {Math.round(m.nearest)} mi ({m.nearestStation?.company})
+                  <br />Nearest: {fmtDist(m.nearest, region)} ({m.nearestStation?.company})
                 </Popup>
               </Marker>
             )

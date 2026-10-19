@@ -5,6 +5,7 @@ import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { geocode } from '../lib/geocodeClient.js'
 import { stationStates, stationPins, countLabel } from '../lib/geo.js'
+import { REGIONS, region as regionInfo, fmtRadius, displayRadius, toMiles } from '../lib/units.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
 const DOC_SLOTS = [
@@ -15,7 +16,8 @@ const DOC_SLOTS = [
 ]
 
 export default function StationsPage() {
-  const { stations, role, refresh } = useApp()
+  const { stations, role, refresh, region } = useApp() // stations = active region only
+  const info = regionInfo(region)
   const [editing, setEditing] = useState(null) // station | 'new'
   const [logging, setLogging] = useState(null) // station
   const [backups, setBackups] = useState(false)
@@ -36,7 +38,7 @@ export default function StationsPage() {
   async function exportCsv() {
     setBusy(true)
     try {
-      await api.download('/stations/export.csv', `moov-stations-${new Date().toISOString().slice(0, 10)}.csv`)
+      await api.download(`/stations/export.csv?country=${region}`, `moov-stations-${region.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`)
     } catch (e) {
       alert(e.message)
     } finally {
@@ -59,12 +61,12 @@ export default function StationsPage() {
       <section className="master">
         <div className="master-head">
           <h3>
-            Master station list{' '}
+            {info.flag} {info.label} station list{' '}
             <span className="muted">{stateFilter ? `${countLabel(visible, stateFilter)} in ${stateFilter} · ${countLabel(stations)} total` : countLabel(stations)}</span>
           </h3>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select className="state-filter" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} title="Filter by state">
-              <option value="">All states</option>
+            <select className="state-filter" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} title={`Filter by ${info.stateLabel.toLowerCase()}`}>
+              <option value="">All {info.stateLabel.toLowerCase() === 'state' ? 'states' : 'provinces'}</option>
               {states.map((st) => <option key={st} value={st}>{st}</option>)}
             </select>
             {can(role, 'exportData') && <button className="ghost" onClick={exportCsv} disabled={busy}>⬇ Export CSV</button>}
@@ -82,7 +84,7 @@ export default function StationsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Company</th><th>City</th><th>State</th><th>Radius</th><th>Products</th>
+                <th>Company</th><th>City</th><th>{info.stateLabel}</th><th>Radius</th><th>Products</th>
                 <th>Score</th><th>Accept</th><th>Avg days</th><th>Status</th><th></th>
               </tr>
             </thead>
@@ -101,7 +103,7 @@ export default function StationsPage() {
                     )}
                   </td>
                   <td><b>{stationStates(s).join(', ') || s.state}</b></td>
-                  <td>{s.serviceRadiusMi} mi</td>
+                  <td>{fmtRadius(s.serviceRadiusMi, region)}</td>
                   <td className="prodcell">
                     {PRODUCTS.filter((p) => s.products?.[p.key]).map((p) => (
                       <span key={p.key} className="ptag">{p.label}</span>
@@ -127,7 +129,7 @@ export default function StationsPage() {
       {editing && <StationForm station={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {logging && <ServiceLogModal station={logging} onClose={() => setLogging(null)} />}
       {backups && <BackupsModal onClose={() => setBackups(false)} />}
-      {importing && <ImportModal onClose={() => setImporting(false)} />}
+      {importing && <ImportModal region={region} onClose={() => setImporting(false)} />}
       {merging && <MergeModal target={merging} onClose={() => setMerging(null)} />}
     </div>
   )
@@ -180,7 +182,7 @@ function MergeModal({ target, onClose }) {
           {candidates.map((s) => (
             <label key={s.id} className={'merge-row' + (picked.has(s.id) ? ' on' : '') + (s.isMaster ? ' disabled' : '')}>
               <input type="checkbox" checked={picked.has(s.id)} disabled={s.isMaster} onChange={() => toggle(s.id)} />
-              <span><b>{s.company}</b> <span className="muted">· {s.city}, {s.state} · {s.serviceRadiusMi} mi</span></span>
+              <span><b>{s.company}</b> <span className="muted">· {s.city}, {s.state} · {fmtRadius(s.serviceRadiusMi, target.country)}</span></span>
               {s.isMaster && <span className="tag master-tag">master</span>}
             </label>
           ))}
@@ -200,8 +202,9 @@ function MergeModal({ target, onClose }) {
 
 // --- Bulk import -----------------------------------------------------------
 
-function ImportModal({ onClose }) {
+function ImportModal({ region, onClose }) {
   const { refresh } = useApp()
+  const info = regionInfo(region)
   const [history, setHistory] = useState([])
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -213,7 +216,7 @@ function ImportModal({ onClose }) {
     if (!file) return
     setBusy(true); setError(null); setResult(null)
     try {
-      const r = await api.importStations(file)
+      const r = await api.importStations(file, region)
       setResult(r)
       await refresh() // new/updated stations flow into Map, Zone Coverage, Analytics
       loadHistory()
@@ -223,17 +226,18 @@ function ImportModal({ onClose }) {
   return (
     <div className="modal-backdrop">
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-        <h3>Import stations from a file</h3>
+        <h3>Import {info.label} stations from a file</h3>
         <p className="muted">
           Round-trip your list: <b>Export CSV</b> (or download a blank template), edit/add rows in Excel,
           then upload here (<code>.xlsx</code> or <code>.csv</code>). Rows match by the <b>ID</b> column —
-          blank ID creates a new station (address is auto-located); filled ID updates it. A database
-          snapshot is taken automatically before applying, so you can roll back.
+          blank ID creates a new station (address is auto-located); filled ID updates it. New rows without
+          a <b>Country</b> column are filed under <b>{info.label}</b>; the radius column is in <b>{info.unit === 'km' ? 'kilometres' : 'miles'}</b>.
+          A database snapshot is taken automatically before applying, so you can roll back.
         </p>
 
         <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
-          <button className="ghost" onClick={() => api.download('/stations/export.csv', 'moov-stations.csv')}>⬇ Export current</button>
-          <button className="ghost" onClick={() => api.download('/stations/import-template.csv', 'moov-stations-template.csv')}>⬇ Blank template</button>
+          <button className="ghost" onClick={() => api.download(`/stations/export.csv?country=${region}`, `moov-stations-${region.toLowerCase()}.csv`)}>⬇ Export current</button>
+          <button className="ghost" onClick={() => api.download(`/stations/import-template.csv?country=${region}`, `moov-stations-${region.toLowerCase()}-template.csv`)}>⬇ Blank template</button>
           <label className="primary upload-btn" style={{ padding: '8px 14px', borderRadius: 8 }}>
             {busy ? 'Uploading…' : 'Choose file & upload'}
             <input type="file" hidden accept=".csv,.xlsx" disabled={busy} onChange={(e) => upload(e.target.files[0])} />
@@ -426,11 +430,11 @@ function BackupsModal({ onClose }) {
 // --- Station add/edit form -------------------------------------------------
 
 function StationForm({ station, onClose }) {
-  const { createStation, updateStation } = useApp()
+  const { createStation, updateStation, region } = useApp()
   const isNew = !station
   const [f, setF] = useState(
     station || {
-      company: '', serviceAddress: '', city: '', state: '', zip: '', lat: '', lng: '', serviceRadiusMi: 25,
+      country: region, company: '', serviceAddress: '', city: '', state: '', zip: '', lat: '', lng: '', serviceRadiusMi: 25,
       taxId: '', primaryContact: '', primaryContactTitle: '', phone: '', email: '', billingAddress: '', shippingAddress: '',
       serviceType: 'On the road', holdsInventory: 'Yes', totalTechnicians: '',
       hvacCertification: '', hvacLicense: '', epa608Techs: '', epa608Level: '',
@@ -447,6 +451,9 @@ function StationForm({ station, onClose }) {
   const [locating, setLocating] = useState(false)
   const [geoMsg, setGeoMsg] = useState(null)
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }))
+  // Radii are stored in miles; the Canadian region enters/sees km.
+  const country = f.country || 'US'
+  const cinfo = regionInfo(country)
   const addContact = () => setF((p) => ({ ...p, contacts: [...(p.contacts || []), { name: '', title: '', phone: '', email: '' }] }))
   const setContact = (i, k, v) => setF((p) => {
     const contacts = [...(p.contacts || [])]
@@ -473,7 +480,7 @@ function StationForm({ station, onClose }) {
     if (!query.trim()) return setAreaMsg((m) => ({ ...m, [i]: 'Enter an address or city/state first.' }))
     setAreaMsg((m) => ({ ...m, [i]: 'Locating…' }))
     try {
-      const geo = await geocode(query)
+      const geo = await geocode(query, country)
       setF((p) => {
         const serviceAreas = [...(p.serviceAreas || [])]
         serviceAreas[i] = { ...serviceAreas[i], lat: geo.lat, lng: geo.lng }
@@ -495,7 +502,7 @@ function StationForm({ station, onClose }) {
     if (!query.trim()) return setGeoMsg('Enter a service address, or city/state/zip, first.')
     try {
       setLocating(true)
-      const geo = await geocode(query)
+      const geo = await geocode(query, country)
       setF((p) => ({ ...p, lat: geo.lat, lng: geo.lng, geocodePrecision: geo.approximate ? 'approx' : 'address' }))
       setGeoMsg((geo.approximate ? '≈ Approximate (area matched — fine for a radius): ' : '✓ Located: ') + (geo.label || '').slice(0, 70))
     } catch (e) {
@@ -517,7 +524,7 @@ function StationForm({ station, onClose }) {
       if (!query.trim()) return setError('Enter a service address (or lat/lng) so we can place the pin.')
       try {
         setSaving(true)
-        const geo = await geocode(query)
+        const geo = await geocode(query, country)
         lat = geo.lat; lng = geo.lng; precision = 'address'
       } catch (err) {
         setSaving(false)
@@ -533,20 +540,20 @@ function StationForm({ station, onClose }) {
       if (alat == null || alng == null) {
         try {
           setSaving(true)
-          const geo = await geocode(query)
+          const geo = await geocode(query, country)
           alat = geo.lat; alng = geo.lng
         } catch (err) {
           setSaving(false)
           return setError(`Could not locate service area "${query}": ${err.message}`)
         }
       }
-      serviceAreas.push({ ...a, lat: alat, lng: alng, radiusMi: parseInt(a.radiusMi, 10) || 25 })
+      serviceAreas.push({ ...a, lat: alat, lng: alng, radiusMi: parseFloat(a.radiusMi) || 25 })
     }
     const { id, isMaster, perf, createdAt, compliance, ...editable } = f
     const num = (v) => (v === '' || v == null ? null : Number(v))
     const payload = {
-      ...editable, lat, lng, geocodePrecision: precision,
-      serviceRadiusMi: parseInt(f.serviceRadiusMi, 10) || 25,
+      ...editable, lat, lng, geocodePrecision: precision, country,
+      serviceRadiusMi: parseFloat(f.serviceRadiusMi) || 25,
       totalTechnicians: num(f.totalTechnicians), epa608Techs: num(f.epa608Techs),
       contacts: (f.contacts || []).filter((c) => c.name || c.title || c.phone || c.email),
       serviceAreas,
@@ -569,13 +576,20 @@ function StationForm({ station, onClose }) {
 
         <div className="label-row">Business & location</div>
         <div className="form-grid">
+          <Field label="Region (which division's map this station appears on)">
+            <select value={country} onChange={(e) => set('country', e.target.value)}>
+              {REGIONS.map((r) => <option key={r.key} value={r.key}>{r.flag} {r.label}</option>)}
+            </select>
+          </Field>
           <Field label="Company (legal)"><input value={f.company} onChange={(e) => set('company', e.target.value)} /></Field>
           <Field label="Tax ID / EIN"><input value={f.taxId || ''} onChange={(e) => set('taxId', e.target.value)} /></Field>
           <Field label="Service address"><input value={f.serviceAddress} onChange={(e) => set('serviceAddress', e.target.value)} /></Field>
           <Field label="City"><input value={f.city} onChange={(e) => set('city', e.target.value)} /></Field>
-          <Field label="State"><input value={f.state} onChange={(e) => set('state', e.target.value)} maxLength={2} /></Field>
-          <Field label="Zip code"><input value={f.zip || ''} onChange={(e) => set('zip', e.target.value)} placeholder="e.g. 33809" /></Field>
-          <Field label="Service radius (miles)"><input type="number" min="1" value={f.serviceRadiusMi} onChange={(e) => set('serviceRadiusMi', e.target.value)} /></Field>
+          <Field label={cinfo.stateLabel}><input value={f.state} onChange={(e) => set('state', e.target.value.toUpperCase())} maxLength={2} placeholder={country === 'CA' ? 'e.g. ON' : 'e.g. FL'} /></Field>
+          <Field label={cinfo.postalLabel}><input value={f.zip || ''} onChange={(e) => set('zip', e.target.value)} placeholder={country === 'CA' ? 'e.g. M5V 2T6' : 'e.g. 33809'} /></Field>
+          <Field label={`Service radius (${cinfo.unit === 'km' ? 'km' : 'miles'})`}>
+            <input type="number" min="1" value={displayRadius(f.serviceRadiusMi, country)} onChange={(e) => set('serviceRadiusMi', toMiles(e.target.value, country))} />
+          </Field>
           <Field label="Primary contact"><input value={f.primaryContact || ''} onChange={(e) => set('primaryContact', e.target.value)} /></Field>
           <Field label="Contact title"><input value={f.primaryContactTitle || ''} onChange={(e) => set('primaryContactTitle', e.target.value)} /></Field>
           <Field label="Phone"><input value={f.phone || ''} onChange={(e) => set('phone', e.target.value)} /></Field>
@@ -601,7 +615,7 @@ function StationForm({ station, onClose }) {
           </button>
           {geoMsg && <span className="muted">{geoMsg}</span>}
         </div>
-        <LocatePreview lat={parseFloat(f.lat)} lng={parseFloat(f.lng)} radiusMi={parseInt(f.serviceRadiusMi, 10) || 25} areas={f.serviceAreas || []} />
+        <LocatePreview lat={parseFloat(f.lat)} lng={parseFloat(f.lng)} radiusMi={parseFloat(f.serviceRadiusMi) || 25} areas={f.serviceAreas || []} />
         <details className="coords-details">
           <summary>Coordinates (auto-filled from the address — only adjust if a pin lands wrong)</summary>
           <div className="form-grid">
@@ -619,13 +633,13 @@ function StationForm({ station, onClose }) {
                 <input placeholder="Street address" value={a.address || ''} onChange={(e) => setArea(i, 'address', e.target.value)} />
                 <input placeholder="City" value={a.city || ''} onChange={(e) => setArea(i, 'city', e.target.value)} />
                 <input placeholder="ST" maxLength={2} value={a.state || ''} onChange={(e) => setArea(i, 'state', e.target.value.toUpperCase())} />
-                <input placeholder="Zip" value={a.zip || ''} onChange={(e) => setArea(i, 'zip', e.target.value)} />
-                <input type="number" min="1" title="Radius (miles)" value={a.radiusMi ?? 25} onChange={(e) => setArea(i, 'radiusMi', e.target.value)} />
+                <input placeholder={cinfo.postalLabel} value={a.zip || ''} onChange={(e) => setArea(i, 'zip', e.target.value)} />
+                <input type="number" min="1" title={`Radius (${cinfo.unit})`} value={displayRadius(a.radiusMi ?? 25, country)} onChange={(e) => setArea(i, 'radiusMi', toMiles(e.target.value, country))} />
                 <button type="button" className="ghost small" onClick={() => locateArea(i)} title="Locate on the map">📍</button>
                 <button type="button" className="ghost small" onClick={() => removeArea(i)} title="Remove this area">✕</button>
               </div>
               <div className="muted area-status">
-                {areaMsg[i] || (a.lat != null ? `✓ Pinned (${Number(a.lat).toFixed(3)}, ${Number(a.lng).toFixed(3)}) · ${a.radiusMi || 25} mi` : 'Not located yet — located automatically on save.')}
+                {areaMsg[i] || (a.lat != null ? `✓ Pinned (${Number(a.lat).toFixed(3)}, ${Number(a.lng).toFixed(3)}) · ${fmtRadius(a.radiusMi || 25, country)}` : 'Not located yet — located automatically on save.')}
               </div>
             </div>
           ))}

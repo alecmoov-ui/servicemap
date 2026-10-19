@@ -18,9 +18,9 @@ function candidates(query) {
   return [...new Set(list.filter(Boolean))]
 }
 
-async function nominatim(q) {
+async function nominatim(q, country) {
   const url =
-    'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' +
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=${country === 'CA' ? 'ca' : 'us'}&q=` +
     encodeURIComponent(q)
   const res = await fetch(url, { headers: { 'Accept-Language': 'en-US' } })
   if (!res.ok) return null
@@ -29,14 +29,15 @@ async function nominatim(q) {
   return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name }
 }
 
-export async function geocode(query) {
+// `country` ('US' | 'CA') restricts matches to that region's addresses.
+export async function geocode(query, country = 'US') {
   const q = (query || '').trim()
   if (!q) throw new Error('Enter an address first.')
 
   // Try the browser first, broadening the query until something matches.
   for (const cand of candidates(q)) {
     try {
-      const hit = await nominatim(cand)
+      const hit = await nominatim(cand, country)
       if (hit) return { ...hit, approximate: cand !== q }
     } catch {
       /* try next candidate */
@@ -45,8 +46,8 @@ export async function geocode(query) {
 
   // Last resort: the server proxy (keyed provider, if configured).
   try {
-    return await api.geocode(q)
+    return await api.geocode(q, country)
   } catch {
-    throw new Error('Could not find that address. Add the ZIP code, or enter lat/lng manually.')
+    throw new Error(`Could not find that address in ${country === 'CA' ? 'Canada' : 'the US'}. Add the ${country === 'CA' ? 'postal' : 'ZIP'} code, check the region switch, or enter lat/lng manually.`)
   }
 }

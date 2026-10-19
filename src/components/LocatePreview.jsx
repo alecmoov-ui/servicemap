@@ -27,7 +27,7 @@ function Fit({ points }) {
       const b = L.latLng(p.lat, p.lng).toBounds((p.radiusMi || 25) * 1609.34 * 2)
       bounds = bounds ? bounds.extend(b) : b
     }
-    map.fitBounds(bounds, { padding: [20, 20] })
+    map.fitBounds(bounds, { padding: [20, 20], animate: false }) // no animation: the modal can unmount mid-flight
   }, [sig, map]) // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }

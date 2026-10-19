@@ -6,6 +6,7 @@ import Database from 'better-sqlite3'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { mkdirSync } from 'node:fs'
+import { normalizeCountry, roundMi } from './units.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = join(__dirname, '..', 'data')
@@ -165,6 +166,10 @@ ensureColumn('stations', 'zip', 'TEXT')
 // several regions. Each: { label, address, city, state, zip, lat, lng, radiusMi }.
 // The station's own address/lat/lng/radius is its PRIMARY area.
 ensureColumn('stations', 'service_areas', "TEXT NOT NULL DEFAULT '[]'")
+// Region: 'US' or 'CA'. Every page shows one region at a time; users have a home
+// region that the app opens on. Existing rows default to US.
+ensureColumn('stations', 'country', "TEXT NOT NULL DEFAULT 'US'")
+ensureColumn('users', 'country', "TEXT NOT NULL DEFAULT 'US'")
 
 // Split the old single `heatPumps` product flag into electrical + refrigerant.
 // Idempotent: only touches station rows that still carry the legacy key.
@@ -204,6 +209,7 @@ export function rowToStation(r, perf) {
     lng: r.lng,
     geocodePrecision: r.geocode_precision,
     serviceRadiusMi: r.service_radius_mi,
+    country: r.country || 'US',
     serviceAreas: JSON.parse(r.service_areas || '[]'),
     products: JSON.parse(r.products || '{}'),
     taxId: r.tax_id,
@@ -251,7 +257,7 @@ export function normalizeAreas(areas) {
       zip: String(a.zip || '').trim(),
       lat: num(a.lat),
       lng: num(a.lng),
-      radiusMi: Math.max(1, parseInt(a.radiusMi, 10) || 25),
+      radiusMi: Math.max(1, roundMi(a.radiusMi) || 25),
     }))
     .filter((a) => a.address || a.city || a.lat != null)
 }
@@ -275,6 +281,7 @@ export function stationToColumns(s) {
   if (s.partsCategories !== undefined) c.parts_categories = JSON.stringify(s.partsCategories)
   if (s.contacts !== undefined) c.contacts = JSON.stringify(s.contacts)
   if (s.serviceAreas !== undefined) c.service_areas = JSON.stringify(normalizeAreas(s.serviceAreas))
+  if (s.country !== undefined) c.country = normalizeCountry(s.country)
   if (s.contractOnFile !== undefined) c.contract_on_file = s.contractOnFile ? 1 : 0
   if (s.w9OnFile !== undefined) c.w9_on_file = s.w9OnFile ? 1 : 0
   if (s.afterHours !== undefined) c.after_hours = s.afterHours ? 1 : 0

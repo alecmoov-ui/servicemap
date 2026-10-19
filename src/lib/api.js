@@ -84,12 +84,12 @@ export const api = {
 
   // Bulk import (Excel/CSV)
   getImports: () => request('/stations/imports'),
-  async importStations(file) {
+  async importStations(file, country = 'US') {
     const fd = new FormData()
     fd.append('file', file)
     const headers = {}
     if (getToken()) headers.Authorization = `Bearer ${getToken()}`
-    const res = await fetch('/api/stations/import', { method: 'POST', headers, body: fd })
+    const res = await fetch('/api/stations/import?country=' + country, { method: 'POST', headers, body: fd })
     const data = await res.json().catch(() => ({}))
     // 200 = applied (maybe with row errors); 422 = nothing applied — both carry a summary.
     if (res.status === 200 || res.status === 422) return data
@@ -100,7 +100,7 @@ export const api = {
   getSnapshots: () => request('/admin/snapshots'),
   createSnapshot: () => request('/admin/snapshot', { method: 'POST' }),
 
-  geocode: (q) => request('/geocode?q=' + encodeURIComponent(q)),
+  geocode: (q, country = 'US') => request('/geocode?q=' + encodeURIComponent(q) + '&country=' + country),
 
   getUsers: () => request('/users'),
   createUser: (u) => request('/users', { method: 'POST', body: u }),

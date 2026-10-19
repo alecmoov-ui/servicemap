@@ -106,6 +106,15 @@ Network KPIs, the requested→accepted→completed funnel, stations-by-state, pr
 coverage, average completion duration, and a reliability leaderboard — all derived from
 the Service Log.
 
+### Regions: US and Canada
+The app serves both divisions from one deployment. A **US / Canada switch** in the header
+picks the active region; Map, Zone Coverage, Analytics and the Stations list then show only
+that region's stations. Each **user has a home country** (Users tab) that the app opens on.
+Each station belongs to one region (set in its form). The Canadian region geocodes Canadian
+addresses, uses **kilometres** for radii and distances (stored internally in miles), says
+"Province"/"Postal code", and has its own metro list for gap analysis (`src/data/metros.ca.js`).
+CSV export/import are per region: the Canadian file has a `Service Radius (km)` column.
+
 ### Stations
 The **master station list** with the full Schedule A profile (identity, location +
 radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:
