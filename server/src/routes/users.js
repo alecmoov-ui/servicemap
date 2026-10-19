@@ -3,13 +3,14 @@ import bcrypt from 'bcryptjs'
 import { db } from '../db.js'
 import { requireAuth, requirePermission, ROLE_KEYS } from '../auth.js'
 import { logFromReq } from '../activity.js'
+import { COUNTRIES, normalizeCountry } from '../units.js'
 
 export const usersRouter = Router()
 usersRouter.use(requireAuth, requirePermission('manageUsers'))
 
 // Passwords are set by the admin who creates the account and are permanent (no
 // temp/first-login flow). Only the bcrypt hash is stored; it is never returned.
-const safe = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, createdAt: u.created_at })
+const safe = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, country: u.country || 'US', createdAt: u.created_at })
 const adminCount = () => db.prepare("SELECT COUNT(*) n FROM users WHERE role = 'admin'").get().n
 const MIN_PW = 6
 
@@ -19,15 +20,16 @@ usersRouter.get('/', (req, res) => {
 })
 
 usersRouter.post('/', (req, res) => {
-  const { email, name, role, password } = req.body || {}
+  const { email, name, role, password, country } = req.body || {}
   if (!email || !name || !password) return res.status(400).json({ error: 'Email, name and password are required' })
   if (!ROLE_KEYS.includes(role)) return res.status(400).json({ error: 'Invalid role' })
+  if (country !== undefined && !COUNTRIES.includes(country)) return res.status(400).json({ error: 'Country must be US or CA' })
   if (String(password).length < MIN_PW) return res.status(400).json({ error: `Password must be at least ${MIN_PW} characters` })
   const exists = db.prepare('SELECT 1 FROM users WHERE email = ?').get(email.toLowerCase().trim())
   if (exists) return res.status(409).json({ error: 'A user with that email already exists' })
   const info = db
-    .prepare('INSERT INTO users (email, name, role, password_hash) VALUES (?, ?, ?, ?)')
-    .run(email.toLowerCase().trim(), name, role, bcrypt.hashSync(password, 10))
+    .prepare('INSERT INTO users (email, name, role, password_hash, country) VALUES (?, ?, ?, ?, ?)')
+    .run(email.toLowerCase().trim(), name, role, bcrypt.hashSync(password, 10), normalizeCountry(country))
   logFromReq(req, { action: 'user.create', entityType: 'user', entityId: info.lastInsertRowid, summary: `Created ${name} (${email}) as ${role}` })
   res.status(201).json(safe(db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)))
 })
@@ -36,7 +38,11 @@ usersRouter.put('/:id', (req, res) => {
   const id = Number(req.params.id)
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id)
   if (!user) return res.status(404).json({ error: 'User not found' })
-  const { name, role, password } = req.body || {}
+  const { name, role, password, country } = req.body || {}
+  if (country !== undefined) {
+    if (!COUNTRIES.includes(country)) return res.status(400).json({ error: 'Country must be US or CA' })
+    db.prepare('UPDATE users SET country = ? WHERE id = ?').run(country, id)
+  }
 
   if (role && role !== user.role) {
     if (!ROLE_KEYS.includes(role)) return res.status(400).json({ error: 'Invalid role' })

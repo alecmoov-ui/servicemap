@@ -49,15 +49,21 @@ change that makes CI red.**
    coveringPin()` in `src/lib/geo.js` — never read `s.lat/s.lng` directly for search,
    map or coverage. `/stations/:id/merge` folds duplicates into one record (moves events,
    docs, contacts; sources become areas; masters are never sources).
-5. **Adding/editing a station or logging an event must immediately reflect in Map, Zone
+5. **Two regions, one database.** `stations.country` / `users.country` are `US` or `CA`.
+   `AppContext` exposes `region` + `stations` (already filtered to the active region) and
+   `allStations`; pages must use the filtered list. Radii are STORED IN MILES everywhere;
+   only the edges convert (`src/lib/units.js` on the client, `server/src/units.js` for
+   CSV). Geocoding takes the country (`geocode(q, country)` / `geocodeOne(q, country)`).
+   Export/import/template take `?country=`; merge is same-region only.
+6. **Adding/editing a station or logging an event must immediately reflect in Map, Zone
    Coverage, and Analytics** — they all read `stations` from `AppContext`, and mutations
    call `loadData()`. Keep that single-source-of-truth flow.
-6. **Never commit secrets, the database, uploads, or backups.** `.env` and
+7. **Never commit secrets, the database, uploads, or backups.** `.env` and
    `server/data/` are gitignored.
-7. **Documents** are stored on disk under `UPLOAD_DIR` with metadata in
+8. **Documents** are stored on disk under `UPLOAD_DIR` with metadata in
    `station_documents`; downloads are auth-gated and streamed. Keep the persistent disk
    in mind for deployment.
-8. **Bulk import** (`importStations.js` + the `/stations/import` route) and **CSV export**
+9. **Bulk import** (`importStations.js` + the `/stations/import` route) and **CSV export**
    share one column spec (`FIELD_COLUMNS`/`PRODUCT_COLUMNS`) so the export round-trips as
    the import template — keep them in sync. Every import takes a DB snapshot first
    (`snapshot.js`) and records to `station_imports`. Match by `id` then company name; never

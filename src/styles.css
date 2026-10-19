@@ -38,7 +38,10 @@ body {
 .tab:hover { background: var(--bg); color: var(--ink); }
 .tab.active { background: #eaf1fe; color: var(--blue); }
 .pill { background: var(--orange); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 4px; }
-.role-switch { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.role-switch { display: flex; align-items: center; gap: 12px; }
+.region-switch { margin-left: auto; display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; background: var(--bg); margin-right: 14px; }
+.seg { border: none; background: transparent; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg.active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
 .who { text-align: right; }
 .who-name { font-weight: 700; font-size: 13px; }
 .who-role { font-size: 11px; color: var(--muted); }

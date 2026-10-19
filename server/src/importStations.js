@@ -4,6 +4,7 @@
 
 import ExcelJS from 'exceljs'
 import { Readable } from 'node:stream'
+import { miToKm, kmToMi, normalizeCountry, roundMi } from './units.js'
 
 // [ Header label, station field, type ]
 export const FIELD_COLUMNS = [
@@ -13,7 +14,9 @@ export const FIELD_COLUMNS = [
   ['City', 'city', 'string'],
   ['State', 'state', 'string'],
   ['Zip', 'zip', 'string'],
-  ['Service Radius (miles)', 'serviceRadiusMi', 'int'],
+  ['Country', 'country', 'country'],
+  // Exported as "(km)" for the Canadian region; both headers import (km -> miles).
+  ['Service Radius (miles)', 'serviceRadiusMi', 'number'],
   ['Status', 'status', 'string'],
   ['Tax ID/EIN', 'taxId', 'string'],
   ['Primary Contact', 'primaryContact', 'string'],
@@ -83,9 +86,10 @@ export const CONTACT_COLUMNS = [
 // area per line, pipe-separated: `Label | Address | City | ST | Radius mi | Lat | Lng`.
 // Lat/Lng may be blank (geocoded on import). Blank column on import = no change.
 export const AREAS_COLUMN = 'Additional Service Areas'
-export function areasToCell(areas) {
+const fmtRadius = (mi, country) => (mi == null ? '' : country === 'CA' ? `${Math.round(miToKm(mi))} km` : `${mi} mi`)
+export function areasToCell(areas, country = 'US') {
   return (areas || [])
-    .map((a) => [a.label, a.address, a.city, a.state, a.radiusMi != null ? `${a.radiusMi} mi` : '', a.lat ?? '', a.lng ?? '']
+    .map((a) => [a.label, a.address, a.city, a.state, fmtRadius(a.radiusMi, country), a.lat ?? '', a.lng ?? '']
       .map((v) => String(v ?? '').replace(/\|/g, '/').trim()).join(' | '))
     .join('\n')
 }
@@ -97,7 +101,10 @@ export function cellToAreas(text) {
     .map((line) => {
       const [label = '', address = '', city = '', state = '', radius = '', lat = '', lng = ''] = line.split('|').map((v) => v.trim())
       const num = (v) => (v === '' || Number.isNaN(Number(v)) ? null : Number(v))
-      return { label, address, city, state: state.toUpperCase(), zip: '', radiusMi: parseInt(radius, 10) || 25, lat: num(lat), lng: num(lng) }
+      // "30 mi" / "48 km" / "30" (bare number = miles)
+      const r = parseFloat(radius)
+      const radiusMi = Number.isNaN(r) ? 25 : /km/i.test(radius) ? Math.max(1, roundMi(kmToMi(r))) : roundMi(r)
+      return { label, address, city, state: state.toUpperCase(), zip: '', radiusMi, lat: num(lat), lng: num(lng) }
     })
     .filter((a) => a.address || a.city || a.lat != null)
 }
@@ -110,13 +117,15 @@ export const PERF_COLUMNS = [
   ['Avg Completion Days', (s) => s.perf?.avgCompletionDays],
 ]
 
-export const EXPORT_HEADER = [
-  ...FIELD_COLUMNS.map((c) => c[0]),
+// Header for one region's export: the radius column is labelled in that region's unit.
+export const exportHeader = (country = 'US') => [
+  ...FIELD_COLUMNS.map(([label, field]) => (field === 'serviceRadiusMi' ? `Service Radius (${country === 'CA' ? 'km' : 'miles'})` : label)),
   ...CONTACT_COLUMNS.map((c) => c.label),
   AREAS_COLUMN,
   ...PRODUCT_COLUMNS.map((c) => c[0]),
   ...PERF_COLUMNS.map((c) => c[0]),
 ]
+export const EXPORT_HEADER = exportHeader('US')
 
 function cell(value) {
   if (value === null || value === undefined) return ''
@@ -127,13 +136,14 @@ function cell(value) {
 export function stationToRow(s) {
   const fields = FIELD_COLUMNS.map(([, field]) => {
     if (field === 'partsCategories') return (s.partsCategories || []).join(', ')
+    if (field === 'serviceRadiusMi' && s.country === 'CA') return s.serviceRadiusMi == null ? '' : Math.round(miToKm(s.serviceRadiusMi))
     if (typeof s[field] === 'boolean') return s[field] ? 'yes' : 'no'
     return cell(s[field])
   })
   const contacts = CONTACT_COLUMNS.map((c) => cell(s.contacts?.[c.idx]?.[c.field]))
   const products = PRODUCT_COLUMNS.map(([, key]) => (s.products?.[key] ? 'yes' : ''))
   const perf = PERF_COLUMNS.map(([, fn]) => cell(fn(s)))
-  return [...fields, ...contacts, areasToCell(s.serviceAreas), ...products, ...perf]
+  return [...fields, ...contacts, areasToCell(s.serviceAreas, s.country), ...products, ...perf]
 }
 
 // ---- Import parsing -------------------------------------------------------
@@ -155,6 +165,8 @@ const HEADER_LOOKUP = (() => {
     m.set(norm(c.label), { kind: 'contact', idx: c.idx, field: c.field })
   }
   m.set(norm(AREAS_COLUMN), { kind: 'areas' })
+  m.set(norm('Service Radius (km)'), { kind: 'field', field: 'serviceRadiusKm', type: 'number' })
+  m.set(norm('serviceRadiusKm'), { kind: 'field', field: 'serviceRadiusKm', type: 'number' })
   m.set(norm('serviceAreas'), { kind: 'areas' })
   return m
 })()
@@ -167,6 +179,7 @@ function coerce(type, raw) {
   if (type === 'number') return Number.isNaN(parseFloat(v)) ? null : parseFloat(v)
   if (type === 'int') return Number.isNaN(parseInt(v, 10)) ? null : parseInt(v, 10)
   if (type === 'bool') return truthy(v)
+  if (type === 'country') return normalizeCountry(v)
   if (type === 'list') return v.split(',').map((x) => x.trim()).filter(Boolean)
   return v
 }
@@ -231,6 +244,9 @@ export function rowToPatch(rowObj) {
       contactsTmp[def.idx][def.field] = String(raw ?? '').trim()
     } else if (def.field === 'id') {
       id = String(raw ?? '').trim() || null
+    } else if (def.field === 'serviceRadiusKm') {
+      const km = coerce('number', raw)
+      if (km != null) patch.serviceRadiusMi = Math.max(1, roundMi(kmToMi(km)))
     } else {
       const value = coerce(def.type, raw)
       patch[def.field] = value

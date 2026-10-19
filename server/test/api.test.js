@@ -338,3 +338,61 @@ test('merge: folds duplicate records into one station; masters cannot be merged 
   assert.ok(!all.some((s) => s.id === dupA.id || s.id === dupB.id))
   assert.equal(all.filter((s) => s.company === 'Pool Cool of FL').length, 1)
 })
+
+test('regions: user home country, station country, km export/import for Canada, same-region merge', async () => {
+  const token = await tokenFor('admin@moovpool.com')
+
+  // Users carry a home country (default US), editable via a dropdown value.
+  const u = await api('/api/users', { method: 'POST', token, body: { email: 'ca.rep@moovpool.com', name: 'CA Rep', role: 'sales', password: 'canada123', country: 'CA' } })
+  assert.equal(u.status, 201)
+  assert.equal(u.data.country, 'CA')
+  const login = await api('/api/auth/login', { method: 'POST', body: { email: 'ca.rep@moovpool.com', password: 'canada123' } })
+  assert.equal(login.data.user.country, 'CA')
+  assert.equal((await api(`/api/users/${u.data.id}`, { method: 'PUT', token, body: { country: 'MX' } })).status, 400)
+  assert.equal((await api(`/api/users/${u.data.id}`, { method: 'PUT', token, body: { country: 'US' } })).data.country, 'US')
+  const me = (await api('/api/auth/me', { token })).data.user
+  assert.equal(me.country, 'US') // existing users default to US
+
+  // Existing/seeded stations are US; a Canadian station stores miles but exports km.
+  const all = (await api('/api/stations', { token })).data
+  assert.ok(all.every((s) => s.country === 'US'))
+  const ca = await api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'Maple Pools', city: 'Mississauga', state: 'ON', country: 'CA', lat: 43.589, lng: -79.644, serviceRadiusMi: 18.6, products: { pumps: true },
+      serviceAreas: [{ label: 'Hamilton', city: 'Hamilton', state: 'ON', lat: 43.2557, lng: -79.8711, radiusMi: 12.4 }] },
+  })
+  assert.equal(ca.status, 201)
+  assert.equal(ca.data.country, 'CA')
+  assert.equal(ca.data.serviceRadiusMi, 18.6)
+
+  const caCsv = await (await fetch(base + '/api/stations/export.csv?country=CA', { headers: { Authorization: `Bearer ${token}` } })).text()
+  assert.match(caCsv.split('\n')[0], /Service Radius \(km\)/)
+  assert.match(caCsv, /Maple Pools/)
+  assert.doesNotMatch(caCsv, /Ideal Contracting/) // US stations stay out of the Canadian file
+  assert.match(caCsv, /Hamilton \| .*\| 20 km \|/) // 12.4 mi -> 20 km
+  const usCsv = await (await fetch(base + '/api/stations/export.csv?country=US', { headers: { Authorization: `Bearer ${token}` } })).text()
+  assert.match(usCsv.split('\n')[0], /Service Radius \(miles\)/)
+  assert.doesNotMatch(usCsv, /Maple Pools/)
+
+  // Import under the Canadian region: km column converts to miles; Country defaults to CA.
+  const csv = [
+    'ID,Company,City,Province,Lat,Lng,Service Radius (km),Additional Service Areas',
+    `${ca.data.id},Maple Pools,Mississauga,ON,43.589,-79.644,50,"Oakville | | Oakville | ON | 16 km | 43.4675 | -79.6877"`,
+    ',Prairie Pool Care,Regina,SK,50.4452,-104.6189,40,',
+  ].join('\n')
+  const fd = new FormData()
+  fd.append('file', new Blob([csv], { type: 'text/csv' }), 'ca.csv')
+  const imp = await (await fetch(base + '/api/stations/import?country=CA', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })).json()
+  assert.equal(imp.errors.length, 0)
+  const after = (await api('/api/stations', { token })).data
+  const maple = after.find((s) => s.id === ca.data.id)
+  assert.equal(maple.serviceRadiusMi, 31.1) // 50 km
+  assert.equal(maple.serviceAreas[0].radiusMi, 9.9) // 16 km
+  const prairie = after.find((s) => s.company === 'Prairie Pool Care')
+  assert.equal(prairie.country, 'CA')
+  assert.equal(prairie.serviceRadiusMi, 24.9) // 40 km
+
+  // Merging across regions is refused.
+  const cross = await api(`/api/stations/${maple.id}/merge`, { method: 'POST', token, body: { sourceIds: [all.find((s) => !s.isMaster)?.id || 'st_01'] } })
+  assert.equal(cross.status, 400)
+})

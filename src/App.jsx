@@ -1,5 +1,6 @@
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import { ROLES, can } from './lib/roles.js'
+import { REGIONS } from './lib/units.js'
 import { useApp } from './lib/AppContext.jsx'
 import MapPage from './pages/MapPage.jsx'
 import CoveragePage from './pages/CoveragePage.jsx'
@@ -24,7 +25,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { user, logout } = useApp()
+  const { user, logout, region, setRegion } = useApp()
   const navigate = useNavigate()
   const [changingPw, setChangingPw] = useState(false)
 
@@ -63,6 +64,14 @@ function Shell() {
             </NavLink>
           )}
         </nav>
+
+        <div className="region-switch" title="Which division's network to show">
+          {REGIONS.map((r) => (
+            <button key={r.key} className={region === r.key ? 'seg active' : 'seg'} onClick={() => setRegion(r.key)}>
+              {r.flag} {r.label}
+            </button>
+          ))}
+        </div>
 
         <div className="role-switch">
           <div className="who">

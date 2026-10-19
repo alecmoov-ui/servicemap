@@ -8,7 +8,8 @@ import { db, rowToStation, stationToColumns, computePerfMap, rowToServiceEvent, 
 import { requireAuth, requirePermission } from '../auth.js'
 import { logFromReq } from '../activity.js'
 import { computeCompliance } from '../compliance.js'
-import { EXPORT_HEADER, stationToRow, readRows, rowToPatch } from '../importStations.js'
+import { exportHeader, stationToRow, readRows, rowToPatch } from '../importStations.js'
+import { normalizeCountry } from '../units.js'
 import { geocodeOne, sleep } from '../geocode.js'
 import { createSnapshot } from '../snapshot.js'
 import { randomUUID as uuid } from 'node:crypto'
@@ -62,20 +63,24 @@ const toCsv = (header, rows) =>
 
 // CSV export of every station — this file IS the import template (round-trip:
 // export -> edit in Excel -> import).
+// One region per file (?country=US|CA, default US) so the radius column is in that
+// region's unit and the file round-trips through that region's Import.
 stationsRouter.get('/export.csv', requirePermission('exportData'), (req, res) => {
+  const country = normalizeCountry(req.query.country)
   const perf = computePerfMap()
-  const rows = db.prepare('SELECT * FROM stations ORDER BY company').all().map((r) => rowToStation(r, perf[r.id]))
+  const rows = db.prepare('SELECT * FROM stations WHERE country = ? ORDER BY company').all(country).map((r) => rowToStation(r, perf[r.id]))
   const stamp = new Date().toISOString().slice(0, 10)
   res.setHeader('Content-Type', 'text/csv')
-  res.setHeader('Content-Disposition', `attachment; filename="moov-stations-${stamp}.csv"`)
-  res.send(toCsv(EXPORT_HEADER, rows.map(stationToRow)))
+  res.setHeader('Content-Disposition', `attachment; filename="moov-stations-${country.toLowerCase()}-${stamp}.csv"`)
+  res.send(toCsv(exportHeader(country), rows.map(stationToRow)))
 })
 
 // Blank template (headers only) for starting a fresh list.
 stationsRouter.get('/import-template.csv', requirePermission('exportData'), (req, res) => {
+  const country = normalizeCountry(req.query.country)
   res.setHeader('Content-Type', 'text/csv')
-  res.setHeader('Content-Disposition', 'attachment; filename="moov-stations-template.csv"')
-  res.send(toCsv(EXPORT_HEADER, []))
+  res.setHeader('Content-Disposition', `attachment; filename="moov-stations-${country.toLowerCase()}-template.csv"`)
+  res.send(toCsv(exportHeader(country), []))
 })
 
 // ---- Bulk import (Excel/CSV) ----------------------------------------------
@@ -124,6 +129,8 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
     return res.status(400).json({ error: 'Could not read the file: ' + e.message })
   }
 
+  // Region the file was uploaded under: default for new rows without a Country column.
+  const defaultCountry = normalizeCountry(req.query.country)
   const findByCompany = db.prepare('SELECT * FROM stations WHERE lower(company) = lower(?)')
   const result = { created: 0, updated: 0, errors: [], warnings: [], snapshot, total: parsed.rows.length }
   let geocodes = 0
@@ -153,6 +160,8 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
       const baseProducts = existing ? JSON.parse(existing.products || '{}') : {}
       const mergedProducts = { ...baseProducts, ...products }
       const merged = { ...patch, products: mergedProducts }
+      if (!existing && merged.country === undefined) merged.country = defaultCountry
+      const rowCountry = merged.country ?? existing?.country ?? defaultCountry
 
       // Geocode if we still lack coordinates and have an address.
       let lat = merged.lat !== undefined ? merged.lat : existing?.lat
@@ -166,7 +175,7 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
         ].filter(Boolean).join(', ')
         if (q) {
           geocodes++
-          const geo = await geocodeOne(q)
+          const geo = await geocodeOne(q, rowCountry)
           if (geo) {
             merged.lat = geo.lat
             merged.lng = geo.lng
@@ -185,7 +194,7 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
           const q = [a.address, a.city, a.state, a.zip].filter(Boolean).join(', ')
           if (!q || geocodes >= 60) continue
           geocodes++
-          const geo = await geocodeOne(q)
+          const geo = await geocodeOne(q, rowCountry)
           if (geo) { a.lat = geo.lat; a.lng = geo.lng }
           else result.warnings.push({ row: rowNum, message: `Could not geocode service area "${q}" — imported without a pin.` })
           await sleep(1100)
@@ -280,6 +289,8 @@ stationsRouter.post('/:id/merge', requirePermission('deleteStations'), (req, res
   const sources = sourceIds.map((id) => getStation(id))
   const missing = sourceIds.filter((_, i) => !sources[i])
   if (missing.length) return res.status(404).json({ error: `Station not found: ${missing.join(', ')}` })
+  const foreign = sources.filter((s) => (s.country || 'US') !== (target.country || 'US'))
+  if (foreign.length) return res.status(400).json({ error: 'Stations can only be merged within the same region (US / Canada).' })
   const masters = sources.filter((s) => s.is_master)
   if (masters.length) {
     return res.status(400).json({ error: `Master records cannot be merged away (${masters.map((m) => m.company).join(', ')}). Use the master as the target instead.` })

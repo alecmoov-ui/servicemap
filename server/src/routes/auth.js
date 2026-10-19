@@ -6,7 +6,7 @@ import { logActivity, logFromReq } from '../activity.js'
 
 export const authRouter = Router()
 
-const safeUser = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role })
+const safeUser = (u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, country: u.country || 'US' })
 
 authRouter.post('/login', (req, res) => {
   const { email, password } = req.body || {}

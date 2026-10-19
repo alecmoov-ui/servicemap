@@ -3,19 +3,22 @@
 
 const cache = new Map()
 
-export async function geocodeOne(query) {
+// `country` ('US' | 'CA') restricts results to that region's addresses.
+export async function geocodeOne(query, country = 'US') {
   const q = (query || '').trim()
   if (!q) return null
-  if (cache.has(q)) return cache.get(q)
+  const cc = country === 'CA' ? 'ca' : 'us'
+  const key = cc + ':' + q
+  if (cache.has(key)) return cache.get(key)
   const url =
-    'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' +
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=${cc}&q=` +
     encodeURIComponent(q)
   const r = await fetch(url, { headers: { 'User-Agent': 'moov-servicemap/1.0', 'Accept-Language': 'en-US' } })
   if (!r.ok) return null
   const data = await r.json()
   if (!data.length) return null
   const out = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name }
-  cache.set(q, out)
+  cache.set(key, out)
   return out
 }
 

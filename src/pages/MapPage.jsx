@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import MapView from '../components/MapView.jsx'
-import { useStations } from '../lib/useStore.js'
+import { useStations, useApp } from '../lib/useStore.js'
+import { fmtDist, fmtRadius, region as regionInfo } from '../lib/units.js'
 import { api } from '../lib/api.js'
 import { geocode } from '../lib/geocodeClient.js'
 import { coveringPin, pinLabel, stationPins, countLabel } from '../lib/geo.js'
@@ -9,15 +10,24 @@ import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completi
 // Built-in example service locations (coordinates included) so the search flow —
 // ranked list + radius circles — is usable even on a network that blocks the live
 // geocoder/tiles. Chosen near heat-pump-capable clusters.
-const EXAMPLES = [
-  { label: 'Orlando, FL', address: 'Orlando, FL', lat: 28.5383, lng: -81.3792 },
-  { label: 'Miami, FL', address: 'Miami, FL', lat: 25.7749, lng: -80.1937 },
-  { label: 'Tampa, FL', address: 'Tampa, FL', lat: 27.9506, lng: -82.4572 },
-  { label: 'Palmdale, CA', address: 'Palmdale, CA', lat: 34.6868, lng: -118.1542 },
-]
+const EXAMPLES = {
+  US: [
+    { label: 'Orlando, FL', address: 'Orlando, FL', lat: 28.5383, lng: -81.3792 },
+    { label: 'Miami, FL', address: 'Miami, FL', lat: 25.7749, lng: -80.1937 },
+    { label: 'Tampa, FL', address: 'Tampa, FL', lat: 27.9506, lng: -82.4572 },
+    { label: 'Palmdale, CA', address: 'Palmdale, CA', lat: 34.6868, lng: -118.1542 },
+  ],
+  CA: [
+    { label: 'Toronto, ON', address: 'Toronto, ON', lat: 43.6532, lng: -79.3832 },
+    { label: 'Vancouver, BC', address: 'Vancouver, BC', lat: 49.2827, lng: -123.1207 },
+    { label: 'Montréal, QC', address: 'Montréal, QC', lat: 45.5019, lng: -73.5674 },
+    { label: 'Calgary, AB', address: 'Calgary, AB', lat: 51.0447, lng: -114.0719 },
+  ],
+}
 
 export default function MapPage() {
-  const allStations = useStations()
+  const { region } = useApp()
+  const allStations = useStations() // active region only
   const stations = allStations.filter((s) => s.status === 'active')
 
   const [product, setProduct] = useState(PRODUCTS[0].key)
@@ -54,7 +64,7 @@ export default function MapPage() {
     setSearching(true)
     setError(null)
     try {
-      const geo = await geocode(address)
+      const geo = await geocode(address, region)
       setConsumer({ ...geo, address })
       setSelectedId(null)
     } catch (err) {
@@ -88,7 +98,7 @@ export default function MapPage() {
               <input
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Street, City, ST  (end-user location)"
+                placeholder={region === 'CA' ? 'Street, City, Province  (end-user location)' : 'Street, City, ST  (end-user location)'}
               />
               <button className="primary" disabled={searching}>
                 {searching ? '…' : 'Search'}
@@ -99,7 +109,7 @@ export default function MapPage() {
 
           <div className="examples">
             <span>No internet / blocked? Try an example:</span>
-            {EXAMPLES.map((ex) => (
+            {EXAMPLES[region].map((ex) => (
               <button
                 key={ex.label}
                 className="chip-mini"
@@ -127,7 +137,8 @@ export default function MapPage() {
         <div className="results">
           {!consumer && (
             <div className="empty">
-              Pick an equipment type and enter the end-user&apos;s address. We&apos;ll show only
+              Pick an equipment type and enter the end-user&apos;s address in{' '}
+              <b>{regionInfo(region).label}</b> (switch region in the header). We&apos;ll show only
               vetted stations that service that product <i>and</i> cover the location, ranked by
               reliability.
             </div>
@@ -164,7 +175,7 @@ export default function MapPage() {
                   {stars(starRating(s.perf))}
                 </div>
                 <div className="card-meta">
-                  {[`${s.distanceMi.toFixed(1)} mi`, s.viaPin.primary ? `${s.city}, ${s.state}` : `${pinLabel(s.viaPin)} location`, s.serviceType].filter(Boolean).join(' · ')}
+                  {[fmtDist(s.distanceMi, region), s.viaPin.primary ? `${s.city}, ${s.state}` : `${pinLabel(s.viaPin)} location`, s.serviceType].filter(Boolean).join(' · ')}
                 </div>
                 {s.compliance && s.compliance.level !== 'ok' && (
                   <div className={'compliance-chip ' + s.compliance.level} title={s.compliance.issues.map((i) => i.message).join(' · ')}>
@@ -187,7 +198,7 @@ export default function MapPage() {
                         <b>{[c.name, c.phone, c.email].filter(Boolean).join(' · ') || '—'}</b>
                       </div>
                     ))}
-                    <div className="kv"><span>Radius</span><b>{s.viaPin.radiusMi} mi{!s.viaPin.primary ? ` (${pinLabel(s.viaPin)})` : ''}</b></div>
+                    <div className="kv"><span>Radius</span><b>{fmtRadius(s.viaPin.radiusMi, region)}{!s.viaPin.primary ? ` (${pinLabel(s.viaPin)})` : ''}</b></div>
                     {stationPins(s).length > 1 && (
                       <div className="kv"><span>Locations</span><b>{stationPins(s).map((p) => p.primary ? `${s.city}, ${s.state}` : pinLabel(p)).join(' · ')}</b></div>
                     )}
@@ -212,6 +223,7 @@ export default function MapPage() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           coverageProduct={showCoverage ? product : null}
+          region={region}
         />
       </div>
     </div>

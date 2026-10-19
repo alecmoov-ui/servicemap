@@ -4,6 +4,7 @@ import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { starRating } from '../lib/ratings.js'
 import { stationPins, pinLabel } from '../lib/geo.js'
+import { fmtRadius, region as regionInfo } from '../lib/units.js'
 
 // Colored pin icons (no local image assets needed).
 function pin(color) {
@@ -21,20 +22,21 @@ const PIN = {
   consumer: pin('#2d6cdf'),
 }
 
-function FitBounds({ points }) {
+function FitBounds({ points, home }) {
   const map = useMap()
   useEffect(() => {
-    if (!points.length) return
+    if (!points.length) { map.setView(home.center, home.zoom); return } // e.g. empty region
     if (points.length === 1) {
       map.setView([points[0].lat, points[0].lng], 9)
     } else {
       map.fitBounds(points.map((p) => [p.lat, p.lng]), { padding: [60, 60], maxZoom: 11 })
     }
-  }, [points, map])
+  }, [points, map, home])
   return null
 }
 
-export default function MapView({ stations, matches, consumer, selectedId, onSelect, coverageProduct }) {
+export default function MapView({ stations, matches, consumer, selectedId, onSelect, coverageProduct, region = 'US' }) {
+  const home = regionInfo(region).home
   const matchIds = new Set(matches.map((m) => m.id))
   // Stations whose coverage circle should be drawn even without a search.
   const coversProduct = (s) => coverageProduct && s.products?.[coverageProduct]
@@ -43,9 +45,9 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
     : (coverageProduct ? stations.filter(coversProduct) : stations).flatMap(stationPins)
 
   return (
-    <MapContainer center={[39.5, -98.35]} zoom={4} className="map" scrollWheelZoom>
+    <MapContainer center={home.center} zoom={home.zoom} className="map" scrollWheelZoom>
       <TileLayer {...TILE_OPTIONS} />
-      <FitBounds points={focusPoints} />
+      <FitBounds points={focusPoints} home={home} />
 
       {stations.map((s) => {
         const isMatch = matchIds.has(s.id)
@@ -75,7 +77,7 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
               <Popup>
                 <strong>{s.company}</strong>
                 <br />
-                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.radiusMi} mi radius
+                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {fmtRadius(p.radiusMi, region)} radius
                 {!p.primary && <><br /><em>Additional location of {s.city}, {s.state}</em></>}
                 <br />
                 {starRating(s.perf).toFixed(1)}★ · {s.phone}

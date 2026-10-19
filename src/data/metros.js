@@ -3,6 +3,8 @@
 // with no station whose service radius reaches it is a recruiting target, ranked
 // by population. This is a stand-in for real demand data (warranty volume, units
 // sold by region) which would replace it in production.
+import { METROS_CA } from './metros.ca.js'
+
 export const METROS = [
   { city: 'New York', state: 'NY', lat: 40.7128, lng: -74.006, pop: 20.1 },
   { city: 'Los Angeles', state: 'CA', lat: 34.0522, lng: -118.2437, pop: 13.2 },
@@ -44,3 +46,6 @@ export const METROS = [
   { city: 'Tucson', state: 'AZ', lat: 32.2226, lng: -110.9747, pop: 1.05 },
   { city: 'Myrtle Beach', state: 'SC', lat: 33.6891, lng: -78.8867, pop: 0.5 },
 ]
+
+// Metro list per region (US / Canada).
+export const METROS_BY_REGION = { US: METROS, CA: METROS_CA }
