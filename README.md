@@ -124,6 +124,16 @@ radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:
   per-station, e.g. 15 / 25 / 60 mi). Capture a **primary contact plus any number of
   additional named contacts** (owner, dispatch, billing…). Then **upload documents**:
   Service Contract, Schedule A, HVAC License, Proof of Insurance.
+- **Coverage outline instead of a radius:** next to *Locate* there is **Draw coverage
+  outline** — zoom in and click corner points around the area the station actually
+  covers. The outline replaces the circle for that pin (search, coverage, map); remove it
+  to go back to a radius. Additional service areas have the same ✏️ option per row.
+- **Station profile:** click a company name in the list, the **Station profile →** button
+  on a Map result card, or the link in any map pin popup to open a read-only view of
+  everything on file (contacts, addresses, licensing, documents, locations, service log).
+  Editors get an *Edit station* button from there.
+- **No map pin** warning: a station saved without coordinates shows ⚠ in the list (it is
+  invisible on the Map and in coverage until located) with a one-click **Locate** fix.
 - **Multi-location companies:** one station can have **additional service areas** — extra
   pins, each with its own address and radius — under the same registration, contacts,
   documents and service log. The Map matches on any pin (distance = nearest pin), Zone
@@ -144,8 +154,10 @@ Maintain your station list in Excel and push updates in bulk (**Stations → Imp
 - **Round-trip:** the **Export CSV** *is* the template (or grab a blank one). Edit/add rows
   in Excel, then upload `.xlsx` or `.csv`.
 - **Additional service areas** travel in one column, one area per line:
-  `Label | Address | City | ST | Radius mi | Lat | Lng` (blank Lat/Lng are geocoded on
-  import; a blank cell leaves the station's areas unchanged).
+  `Label | Address | City | ST | Radius mi | Lat | Lng [| lat,lng lat,lng …]` (blank Lat/Lng
+  are geocoded on import; the optional last segment is a drawn outline; a blank cell leaves
+  the station's areas unchanged). The primary pin's outline is the `Coverage Outline`
+  column: `lat,lng; lat,lng; …`.
 - **Matching:** rows match on the **`ID`** column — blank `ID` creates a new station (the
   address is auto-geocoded); a filled `ID` updates that station. Fallback: blank `ID` with
   an exact **Company** match updates the existing record (keep company names unique).

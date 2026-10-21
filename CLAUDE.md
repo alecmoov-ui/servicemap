@@ -45,9 +45,10 @@ change that makes CI red.**
    `service_events`. Don't add denormalized counter columns back to `stations`.
 4. **Stations can have several pins.** The row's own address/lat/lng/radius is the PRIMARY
    area; `service_areas` (JSON) holds extra `{label,address,city,state,zip,lat,lng,radiusMi}`
-   pins. All geography on the client goes through `stationPins()/stationStates()/
-   coveringPin()` in `src/lib/geo.js` — never read `s.lat/s.lng` directly for search,
-   map or coverage. `/stations/:id/merge` folds duplicates into one record (moves events,
+   pins. A pin covers its radius circle OR, when drawn, its outline (`coverage_polygon`
+   on the station, `polygon` on an area; `[[lat,lng],…]`, 3+ points). All geography on
+   the client goes through `stationPins()/stationStates()/coveringPin()/pinCovers()` in
+   `src/lib/geo.js` — never read `s.lat/s.lng` or compare to `radiusMi` directly. `/stations/:id/merge` folds duplicates into one record (moves events,
    docs, contacts; sources become areas; masters are never sources).
 5. **Two regions, one database.** `stations.country` / `users.country` are `US` or `CA`.
    `AppContext` exposes `region` + `stations` (already filtered to the active region) and

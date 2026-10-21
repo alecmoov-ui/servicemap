@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
-import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Circle, Polygon, CircleMarker, Marker, Popup } from 'react-leaflet'
+import { useNavigate } from 'react-router-dom'
+import StationProfile from '../components/StationProfile.jsx'
 import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { useStations, useApp } from '../lib/useStore.js'
 import { fmtDist, fmtRadius, region as regionInfo } from '../lib/units.js'
-import { haversineMiles, stationPins, stationStates, pinLabel, locationCount } from '../lib/geo.js'
+import { haversineMiles, stationPins, stationStates, pinLabel, locationCount, pinCovers } from '../lib/geo.js'
 import { PRODUCTS } from '../lib/ratings.js'
 import { METROS_BY_REGION } from '../data/metros.js'
 
@@ -26,7 +28,10 @@ export default function CoveragePage() {
   const info = regionInfo(region)
   const METROS = METROS_BY_REGION[region]
   const [product, setProduct] = useState('all')
+  const [profileId, setProfileId] = useState(null)
+  const navigate = useNavigate()
   const all = useStations().filter((s) => s.status === 'active')
+  const profileStation = profileId ? all.find((s) => s.id === profileId) : null
 
   // Stations that service the selected product (all = whole active network).
   const stations = useMemo(
@@ -48,7 +53,7 @@ export default function CoveragePage() {
             nearest = d
             nearestStation = s
           }
-          if (d <= p.radiusMi) covers = true
+          if (pinCovers(m, p)) covers = true
         }
         if (covers) coveringCount++
       }
@@ -146,12 +151,9 @@ export default function CoveragePage() {
 
           {/* Density layer: overlapping radii shade darker where coverage is redundant */}
           {stations.flatMap(stationPins).map((p) => (
-            <Circle
-              key={'c' + p.key}
-              center={[p.lat, p.lng]}
-              radius={p.radiusMi * 1609.34}
-              pathOptions={{ color: '#1f9d55', weight: 0, fillColor: '#1f9d55', fillOpacity: 0.14 }}
-            />
+            p.polygon
+              ? <Polygon key={'c' + p.key} positions={p.polygon} pathOptions={{ color: '#1f9d55', weight: 0, fillColor: '#1f9d55', fillOpacity: 0.14 }} />
+              : <Circle key={'c' + p.key} center={[p.lat, p.lng]} radius={p.radiusMi * 1609.34} pathOptions={{ color: '#1f9d55', weight: 0, fillColor: '#1f9d55', fillOpacity: 0.14 }} />
           ))}
           {stations.flatMap((s) => stationPins(s).map((p) => (
             <CircleMarker
@@ -163,7 +165,10 @@ export default function CoveragePage() {
               <Popup>
                 <strong>{s.company}</strong>
                 <br />
-                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {fmtRadius(p.radiusMi, region)}
+                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.polygon ? 'drawn outline' : fmtRadius(p.radiusMi, region)}
+                <div className="popup-actions">
+                  <button className="ghost small" onClick={() => setProfileId(s.id)}>Station profile →</button>
+                </div>
               </Popup>
             </CircleMarker>
           )))}
@@ -194,6 +199,14 @@ export default function CoveragePage() {
           )}
         </MapContainer>
       </div>
+
+      {profileStation && (
+        <StationProfile
+          station={profileStation}
+          onClose={() => setProfileId(null)}
+          onEdit={() => navigate(`/stations?open=${encodeURIComponent(profileStation.id)}&edit=1`)}
+        />
+      )}
     </div>
   )
 }

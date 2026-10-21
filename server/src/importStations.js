@@ -17,6 +17,8 @@ export const FIELD_COLUMNS = [
   ['Country', 'country', 'country'],
   // Exported as "(km)" for the Canadian region; both headers import (km -> miles).
   ['Service Radius (miles)', 'serviceRadiusMi', 'number'],
+  // Drawn outline for the primary pin: "lat,lng; lat,lng; ..." (replaces the radius).
+  ['Coverage Outline', 'coveragePolygon', 'polygon'],
   ['Status', 'status', 'string'],
   ['Tax ID/EIN', 'taxId', 'string'],
   ['Primary Contact', 'primaryContact', 'string'],
@@ -87,9 +89,17 @@ export const CONTACT_COLUMNS = [
 // Lat/Lng may be blank (geocoded on import). Blank column on import = no change.
 export const AREAS_COLUMN = 'Additional Service Areas'
 const fmtRadius = (mi, country) => (mi == null ? '' : country === 'CA' ? `${Math.round(miToKm(mi))} km` : `${mi} mi`)
+export const polygonToText = (poly) => (poly || []).map(([a, b]) => `${a},${b}`).join('; ')
+export function textToPolygon(text) {
+  return String(text ?? '')
+    .split(/[;\n]+/)
+    .map((pair) => pair.trim().split(/\s*,\s*/).map(Number))
+    .filter((p) => p.length === 2 && p.every(Number.isFinite))
+}
+// Optional 8th segment per area: the drawn outline as "lat,lng lat,lng ..." (space-separated).
 export function areasToCell(areas, country = 'US') {
   return (areas || [])
-    .map((a) => [a.label, a.address, a.city, a.state, fmtRadius(a.radiusMi, country), a.lat ?? '', a.lng ?? '']
+    .map((a) => [a.label, a.address, a.city, a.state, fmtRadius(a.radiusMi, country), a.lat ?? '', a.lng ?? '', (a.polygon || []).map(([x, y]) => `${x},${y}`).join(' ')]
       .map((v) => String(v ?? '').replace(/\|/g, '/').trim()).join(' | '))
     .join('\n')
 }
@@ -99,12 +109,13 @@ export function cellToAreas(text) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [label = '', address = '', city = '', state = '', radius = '', lat = '', lng = ''] = line.split('|').map((v) => v.trim())
+      const [label = '', address = '', city = '', state = '', radius = '', lat = '', lng = '', outline = ''] = line.split('|').map((v) => v.trim())
       const num = (v) => (v === '' || Number.isNaN(Number(v)) ? null : Number(v))
       // "30 mi" / "48 km" / "30" (bare number = miles)
       const r = parseFloat(radius)
       const radiusMi = Number.isNaN(r) ? 25 : /km/i.test(radius) ? Math.max(1, roundMi(kmToMi(r))) : roundMi(r)
-      return { label, address, city, state: state.toUpperCase(), zip: '', radiusMi, lat: num(lat), lng: num(lng) }
+      const polygon = outline.split(/\s+/).map((pair) => pair.split(',').map(Number)).filter((p) => p.length === 2 && p.every(Number.isFinite))
+      return { label, address, city, state: state.toUpperCase(), zip: '', radiusMi, lat: num(lat), lng: num(lng), polygon }
     })
     .filter((a) => a.address || a.city || a.lat != null)
 }
@@ -137,6 +148,7 @@ export function stationToRow(s) {
   const fields = FIELD_COLUMNS.map(([, field]) => {
     if (field === 'partsCategories') return (s.partsCategories || []).join(', ')
     if (field === 'serviceRadiusMi' && s.country === 'CA') return s.serviceRadiusMi == null ? '' : Math.round(miToKm(s.serviceRadiusMi))
+    if (field === 'coveragePolygon') return polygonToText(s.coveragePolygon)
     if (typeof s[field] === 'boolean') return s[field] ? 'yes' : 'no'
     return cell(s[field])
   })
@@ -180,6 +192,7 @@ function coerce(type, raw) {
   if (type === 'int') return Number.isNaN(parseInt(v, 10)) ? null : parseInt(v, 10)
   if (type === 'bool') return truthy(v)
   if (type === 'country') return normalizeCountry(v)
+  if (type === 'polygon') return textToPolygon(v)
   if (type === 'list') return v.split(',').map((x) => x.trim()).filter(Boolean)
   return v
 }

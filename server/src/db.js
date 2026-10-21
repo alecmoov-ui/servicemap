@@ -169,6 +169,9 @@ ensureColumn('stations', 'service_areas', "TEXT NOT NULL DEFAULT '[]'")
 // Region: 'US' or 'CA'. Every page shows one region at a time; users have a home
 // region that the app opens on. Existing rows default to US.
 ensureColumn('stations', 'country', "TEXT NOT NULL DEFAULT 'US'")
+// Drawn coverage outline for the PRIMARY pin: JSON [[lat,lng],...] (3+ points). When
+// present it replaces the radius circle for matching/drawing. Areas carry `polygon`.
+ensureColumn('stations', 'coverage_polygon', "TEXT NOT NULL DEFAULT '[]'")
 ensureColumn('users', 'country', "TEXT NOT NULL DEFAULT 'US'")
 
 // Split the old single `heatPumps` product flag into electrical + refrigerant.
@@ -210,6 +213,7 @@ export function rowToStation(r, perf) {
     geocodePrecision: r.geocode_precision,
     serviceRadiusMi: r.service_radius_mi,
     country: r.country || 'US',
+    coveragePolygon: JSON.parse(r.coverage_polygon || '[]'),
     serviceAreas: JSON.parse(r.service_areas || '[]'),
     products: JSON.parse(r.products || '{}'),
     taxId: r.tax_id,
@@ -245,6 +249,16 @@ export function rowToStation(r, perf) {
   }
 }
 
+// A polygon is a list of [lat, lng] pairs; anything malformed or < 3 points -> [].
+export function normalizePolygon(poly) {
+  if (!Array.isArray(poly)) return []
+  const pts = poly
+    .map((p) => (Array.isArray(p) ? [Number(p[0]), Number(p[1])] : [Number(p?.lat), Number(p?.lng)]))
+    .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180)
+    .map(([a, b]) => [Math.round(a * 1e5) / 1e5, Math.round(b * 1e5) / 1e5])
+  return pts.length >= 3 ? pts : []
+}
+
 // Keep only well-formed areas; coerce numbers so the map never gets strings.
 export function normalizeAreas(areas) {
   const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v))
@@ -258,6 +272,7 @@ export function normalizeAreas(areas) {
       lat: num(a.lat),
       lng: num(a.lng),
       radiusMi: Math.max(1, roundMi(a.radiusMi) || 25),
+      polygon: normalizePolygon(a.polygon),
     }))
     .filter((a) => a.address || a.city || a.lat != null)
 }
@@ -282,6 +297,7 @@ export function stationToColumns(s) {
   if (s.contacts !== undefined) c.contacts = JSON.stringify(s.contacts)
   if (s.serviceAreas !== undefined) c.service_areas = JSON.stringify(normalizeAreas(s.serviceAreas))
   if (s.country !== undefined) c.country = normalizeCountry(s.country)
+  if (s.coveragePolygon !== undefined) c.coverage_polygon = JSON.stringify(normalizePolygon(s.coveragePolygon))
   if (s.contractOnFile !== undefined) c.contract_on_file = s.contractOnFile ? 1 : 0
   if (s.w9OnFile !== undefined) c.w9_on_file = s.w9OnFile ? 1 : 0
   if (s.afterHours !== undefined) c.after_hours = s.afterHours ? 1 : 0

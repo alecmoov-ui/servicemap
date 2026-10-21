@@ -216,7 +216,23 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 1
 .contacts-list { display: flex; flex-direction: column; gap: 6px; }
 .contact-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1.4fr auto; gap: 6px; align-items: center; }
 .contact-row input { padding: 6px 8px; }
-.area-row { display: grid; grid-template-columns: 1.1fr 1.6fr 1fr 44px 70px 64px auto auto; gap: 6px; align-items: center; }
+.locate-map.drawing { cursor: crosshair; }
+.draw-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; padding: 8px 10px; border: 1px dashed #7a1fa2; border-radius: 10px; background: #faf5ff; font-size: 12.5px; }
+.draw-toolbar b { color: #7a1fa2; }
+.profile-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.profile-head h3 { margin-bottom: 2px; }
+.score.big { font-size: 20px; min-width: 44px; height: 44px; line-height: 44px; }
+.profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.profile .kv { padding: 3px 0; }
+.profile .locate-preview { margin-bottom: 8px; }
+.table.small td, .table.small th { padding: 6px 8px; font-size: 12px; }
+.linkish { background: none; border: none; color: var(--blue); cursor: pointer; font-size: inherit; padding: 0; text-decoration: underline; }
+.popup-actions { margin-top: 6px; }
+.area-row { display: grid; grid-template-columns: 1.1fr 1.6fr 1fr 44px 70px 64px auto auto auto; gap: 6px; align-items: center; }
+.linkish.strong { font-weight: 700; color: var(--ink); text-decoration: none; }
+.linkish.strong:hover { text-decoration: underline; }
+.badge.issue .linkish { color: inherit; margin-left: 2px; }
+.primary.small { padding: 5px 10px; font-size: 12px; }
 .area-row input { padding: 6px 8px; }
 .area-status { font-size: 11.5px; margin: 2px 0 4px 2px; }
 .merge-list { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; max-height: 320px; overflow-y: auto; }
@@ -240,6 +256,7 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 1
 @media (max-width: 900px) {
   .kpis, .charts, .form-grid { grid-template-columns: 1fr; }
   .area-row { grid-template-columns: 1fr 1fr; }
+  .profile-grid { grid-template-columns: 1fr; }
   .map-layout { flex-direction: column; }
   .sidebar { width: 100%; min-width: 0; max-height: 50%; }
 }

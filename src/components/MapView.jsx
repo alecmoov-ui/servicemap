@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Circle, Polygon, Popup, useMap } from 'react-leaflet'
 import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { starRating } from '../lib/ratings.js'
@@ -35,7 +35,7 @@ function FitBounds({ points, home }) {
   return null
 }
 
-export default function MapView({ stations, matches, consumer, selectedId, onSelect, coverageProduct, region = 'US' }) {
+export default function MapView({ stations, matches, consumer, selectedId, onSelect, onProfile, coverageProduct, region = 'US' }) {
   const home = regionInfo(region).home
   const matchIds = new Set(matches.map((m) => m.id))
   // Stations whose coverage circle should be drawn even without a search.
@@ -56,19 +56,17 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
         // One pin + circle per location; all share the station's identity/contacts.
         return stationPins(s).map((p) => (
           <div key={p.key}>
-            {showCircle && (
-              <Circle
-                center={[p.lat, p.lng]}
-                radius={p.radiusMi * 1609.34}
-                pathOptions={
-                  isSel
-                    ? { color: '#e0701a', weight: 1, fillOpacity: 0.12 }
-                    : isMatch
-                      ? { color: '#1f9d55', weight: 1, fillOpacity: 0.06 }
-                      : { color: '#2d6cdf', weight: 1, fillColor: '#2d6cdf', fillOpacity: 0.05 } // coverage overlay
-                }
-              />
-            )}
+            {showCircle && (() => {
+              const pathOptions = isSel
+                ? { color: '#e0701a', weight: 1, fillOpacity: 0.12 }
+                : isMatch
+                  ? { color: '#1f9d55', weight: 1, fillOpacity: 0.06 }
+                  : { color: '#2d6cdf', weight: 1, fillColor: '#2d6cdf', fillOpacity: 0.05 } // coverage overlay
+              // Drawn outline replaces the radius circle.
+              return p.polygon
+                ? <Polygon positions={p.polygon} pathOptions={pathOptions} />
+                : <Circle center={[p.lat, p.lng]} radius={p.radiusMi * 1609.34} pathOptions={pathOptions} />
+            })()}
             <Marker
               position={[p.lat, p.lng]}
               icon={isSel ? PIN.selected : isMatch ? PIN.match : PIN.station}
@@ -77,12 +75,17 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
               <Popup>
                 <strong>{s.company}</strong>
                 <br />
-                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {fmtRadius(p.radiusMi, region)} radius
+                {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.polygon ? 'drawn outline' : `${fmtRadius(p.radiusMi, region)} radius`}
                 {!p.primary && <><br /><em>Additional location of {s.city}, {s.state}</em></>}
                 <br />
                 {starRating(s.perf).toFixed(1)}★ · {s.phone}
                 <br />
                 <a href={`mailto:${s.email}`}>{s.email}</a>
+                {onProfile && (
+                  <div className="popup-actions">
+                    <button className="ghost small" onClick={() => onProfile(s.id)}>Station profile →</button>
+                  </div>
+                )}
               </Popup>
             </Marker>
           </div>
