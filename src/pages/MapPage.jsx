@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import StationProfile from '../components/StationProfile.jsx'
 import MapView from '../components/MapView.jsx'
 import { useStations, useApp } from '../lib/useStore.js'
 import { fmtDist, fmtRadius, region as regionInfo } from '../lib/units.js'
@@ -37,6 +39,9 @@ export default function MapPage() {
   const [error, setError] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [showCoverage, setShowCoverage] = useState(false)
+  const [profileId, setProfileId] = useState(null)
+  const navigate = useNavigate()
+  const profileStation = profileId ? allStations.find((s) => s.id === profileId) : null
 
   // Stations whose coverage circles overlay the map (the selected product's network).
   const coverageLabel = useMemo(
@@ -198,7 +203,7 @@ export default function MapPage() {
                         <b>{[c.name, c.phone, c.email].filter(Boolean).join(' · ') || '—'}</b>
                       </div>
                     ))}
-                    <div className="kv"><span>Radius</span><b>{fmtRadius(s.viaPin.radiusMi, region)}{!s.viaPin.primary ? ` (${pinLabel(s.viaPin)})` : ''}</b></div>
+                    <div className="kv"><span>Coverage</span><b>{s.viaPin.polygon ? 'Drawn outline' : `${fmtRadius(s.viaPin.radiusMi, region)} radius`}{!s.viaPin.primary ? ` (${pinLabel(s.viaPin)})` : ''}</b></div>
                     {stationPins(s).length > 1 && (
                       <div className="kv"><span>Locations</span><b>{stationPins(s).map((p) => p.primary ? `${s.city}, ${s.state}` : pinLabel(p)).join(' · ')}</b></div>
                     )}
@@ -207,6 +212,9 @@ export default function MapPage() {
                     <div className="muted" style={{ marginTop: 8 }}>
                       Use these details to open/route the dispatch in Zendesk.
                     </div>
+                    <button className="ghost small" style={{ marginTop: 8 }} onClick={(e) => { e.stopPropagation(); setProfileId(s.id) }}>
+                      Station profile →
+                    </button>
                   </div>
                 )}
               </div>
@@ -222,10 +230,19 @@ export default function MapPage() {
           consumer={consumer}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          onProfile={setProfileId}
           coverageProduct={showCoverage ? product : null}
           region={region}
         />
       </div>
+
+      {profileStation && (
+        <StationProfile
+          station={profileStation}
+          onClose={() => setProfileId(null)}
+          onEdit={() => navigate(`/stations?open=${encodeURIComponent(profileStation.id)}&edit=1`)}
+        />
+      )}
     </div>
   )
 }

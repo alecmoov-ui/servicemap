@@ -396,3 +396,41 @@ test('regions: user home country, station country, km export/import for Canada, 
   const cross = await api(`/api/stations/${maple.id}/merge`, { method: 'POST', token, body: { sourceIds: [all.find((s) => !s.isMaster)?.id || 'st_01'] } })
   assert.equal(cross.status, 400)
 })
+
+test('coverage outlines: polygon round-trip on station + area, normalisation, CSV column', async () => {
+  const token = await tokenFor('admin@moovpool.com')
+  const outline = [[26.2, -81.9], [26.2, -81.6], [25.9, -81.6], [25.9, -81.9]]
+  const created = await api('/api/stations', {
+    method: 'POST', token,
+    body: { company: 'Outline Pools', city: 'Naples', state: 'FL', lat: 26.14, lng: -81.79, serviceRadiusMi: 25, products: { pumps: true },
+      coveragePolygon: outline,
+      serviceAreas: [{ label: 'East', city: 'Immokalee', state: 'FL', lat: 26.42, lng: -81.42, radiusMi: 15, polygon: [[26.5, -81.5], [26.5, -81.3], [26.3, -81.4]] }] },
+  })
+  assert.equal(created.status, 201)
+  assert.deepEqual(created.data.coveragePolygon, outline)
+  assert.equal(created.data.serviceAreas[0].polygon.length, 3)
+
+  // Fewer than 3 points, or junk, is stored as "no outline" (radius applies again).
+  const cleared = await api(`/api/stations/${created.data.id}`, { method: 'PUT', token, body: { coveragePolygon: [[1, 2], ['x', null]] } })
+  assert.deepEqual(cleared.data.coveragePolygon, [])
+  await api(`/api/stations/${created.data.id}`, { method: 'PUT', token, body: { coveragePolygon: outline } })
+
+  // Export carries the outline column and the area's outline segment; import reads both back.
+  const csv = await (await fetch(base + '/api/stations/export.csv?country=US', { headers: { Authorization: `Bearer ${token}` } })).text()
+  assert.match(csv.split('\n')[0], /Coverage Outline/)
+  assert.match(csv, /26.2,-81.9; 26.2,-81.6; 25.9,-81.6; 25.9,-81.9/)
+  assert.match(csv, /East \| .*\| 26.5,-81.5 26.5,-81.3 26.3,-81.4/)
+
+  const importCsv = [
+    'ID,Company,City,State,Lat,Lng,Coverage Outline,Additional Service Areas',
+    `${created.data.id},Outline Pools,Naples,FL,26.14,-81.79,"27,-82; 27,-81.5; 26.6,-81.7","West | | Marco Island | FL | 10 mi | 25.94 | -81.72 | 26,-81.8 26,-81.6 25.8,-81.7"`,
+  ].join('\n')
+  const fd = new FormData()
+  fd.append('file', new Blob([importCsv], { type: 'text/csv' }), 'outline.csv')
+  const imp = await (await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })).json()
+  assert.equal(imp.errors.length, 0)
+  const after = (await api('/api/stations', { token })).data.find((s) => s.id === created.data.id)
+  assert.deepEqual(after.coveragePolygon, [[27, -82], [27, -81.5], [26.6, -81.7]])
+  assert.equal(after.serviceAreas[0].city, 'Marco Island')
+  assert.deepEqual(after.serviceAreas[0].polygon, [[26, -81.8], [26, -81.6], [25.8, -81.7]])
+})

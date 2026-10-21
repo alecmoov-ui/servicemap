@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import StationProfile from '../components/StationProfile.jsx'
 import { useApp } from '../lib/AppContext.jsx'
 import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
 import { geocode } from '../lib/geocodeClient.js'
-import { stationStates, stationPins, countLabel } from '../lib/geo.js'
+import { stationStates, stationPins, countLabel, validPolygon } from '../lib/geo.js'
 import { REGIONS, region as regionInfo, fmtRadius, displayRadius, toMiles } from '../lib/units.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
@@ -23,7 +25,29 @@ export default function StationsPage() {
   const [backups, setBackups] = useState(false)
   const [importing, setImporting] = useState(false)
   const [merging, setMerging] = useState(null) // target station
+  const [profile, setProfile] = useState(null) // station
   const [busy, setBusy] = useState(false)
+  const { updateStation } = useApp()
+
+  // Deep link from Map / Coverage: /stations?open=<id>[&edit=1]
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const id = params.get('open')
+    if (!id || !stations.length) return
+    const s = stations.find((x) => x.id === id)
+    if (s) (params.get('edit') === '1' && can(role, 'editStations') ? setEditing : setProfile)(s)
+    setParams({}, { replace: true })
+  }, [params, stations]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Quick fix for stations saved without coordinates: geocode and save the pin.
+  async function locateNow(s) {
+    const q = [s.serviceAddress, s.city, s.state, s.zip].filter(Boolean).join(', ')
+    if (!q) return alert('This station has no address to locate. Open Edit and add one.')
+    try {
+      const geo = await geocode(q, s.country)
+      await updateStation(s.id, { lat: geo.lat, lng: geo.lng, geocodePrecision: geo.approximate ? 'approx' : 'address' })
+    } catch (e) { alert(e.message) }
+  }
 
   // State filter (A→Z). Options come from the stations actually on file.
   const [stateFilter, setStateFilter] = useState('')
@@ -92,10 +116,16 @@ export default function StationsPage() {
               {visible.map((s) => (
                 <tr key={s.id}>
                   <td>
-                    <b>{s.company}</b>
+                    <button className="linkish strong" onClick={() => setProfile(s)} title="Open station profile">{s.company}</button>
                   </td>
                   <td>
                     {s.city}
+                    {stationPins(s).length === 0 && (
+                      <span className="badge issue" title="No coordinates saved — this station does not appear on the map or in coverage. Click Locate to fix.">
+                        ⚠ No map pin{' '}
+                        {can(role, 'editStations') && <button className="linkish" onClick={() => locateNow(s)}>Locate</button>}
+                      </span>
+                    )}
                     {stationPins(s).length > 1 && (
                       <span className="tag added-tag" title={(s.serviceAreas || []).map((a) => a.label || `${a.city}, ${a.state}`).join(' · ')}>
                         +{stationPins(s).length - 1} location{stationPins(s).length > 2 ? 's' : ''}
@@ -103,7 +133,7 @@ export default function StationsPage() {
                     )}
                   </td>
                   <td><b>{stationStates(s).join(', ') || s.state}</b></td>
-                  <td>{fmtRadius(s.serviceRadiusMi, region)}</td>
+                  <td>{validPolygon(s.coveragePolygon) ? <span title="Drawn coverage outline">outline</span> : fmtRadius(s.serviceRadiusMi, region)}</td>
                   <td className="prodcell">
                     {PRODUCTS.filter((p) => s.products?.[p.key]).map((p) => (
                       <span key={p.key} className="ptag">{p.label}</span>
@@ -131,6 +161,13 @@ export default function StationsPage() {
       {backups && <BackupsModal onClose={() => setBackups(false)} />}
       {importing && <ImportModal region={region} onClose={() => setImporting(false)} />}
       {merging && <MergeModal target={merging} onClose={() => setMerging(null)} />}
+      {profile && (
+        <StationProfile
+          station={stations.find((x) => x.id === profile.id) || profile}
+          onClose={() => setProfile(null)}
+          onEdit={can(role, 'editStations') ? () => { setProfile(null); setEditing(profile) } : undefined}
+        />
+      )}
     </div>
   )
 }
@@ -444,9 +481,26 @@ function StationForm({ station, onClose }) {
       partsCategories: [],
       contacts: [],
       serviceAreas: [],
+      coveragePolygon: [],
     }
   )
   const [saving, setSaving] = useState(false)
+  // Outline drawing: which pin is being drawn ('primary' | area index | null) + draft points.
+  const [drawTarget, setDrawTarget] = useState(null)
+  const [draft, setDraft] = useState([])
+  const polygonOf = (target) => (target === 'primary' ? f.coveragePolygon : f.serviceAreas?.[target]?.polygon) || []
+  const startDraw = (target) => { setDraft(polygonOf(target)); setDrawTarget(target) }
+  const setPolygon = (target, poly) => setF((p) => {
+    if (target === 'primary') return { ...p, coveragePolygon: poly }
+    const serviceAreas = [...(p.serviceAreas || [])]
+    serviceAreas[target] = { ...serviceAreas[target], polygon: poly }
+    return { ...p, serviceAreas }
+  })
+  const finishDraw = () => { if (draft.length >= 3) setPolygon(drawTarget, draft); setDrawTarget(null); setDraft([]) }
+  const cancelDraw = () => { setDrawTarget(null); setDraft([]) }
+  const removeOutline = (target) => setPolygon(target, [])
+  const hasOutline = (target) => polygonOf(target).length >= 3
+  const drawLabel = drawTarget === 'primary' ? 'the primary address' : drawTarget != null ? `service area ${drawTarget + 1}` : ''
   const [error, setError] = useState(null)
   const [locating, setLocating] = useState(false)
   const [geoMsg, setGeoMsg] = useState(null)
@@ -587,8 +641,8 @@ function StationForm({ station, onClose }) {
           <Field label="City"><input value={f.city} onChange={(e) => set('city', e.target.value)} /></Field>
           <Field label={cinfo.stateLabel}><input value={f.state} onChange={(e) => set('state', e.target.value.toUpperCase())} maxLength={2} placeholder={country === 'CA' ? 'e.g. ON' : 'e.g. FL'} /></Field>
           <Field label={cinfo.postalLabel}><input value={f.zip || ''} onChange={(e) => set('zip', e.target.value)} placeholder={country === 'CA' ? 'e.g. M5V 2T6' : 'e.g. 33809'} /></Field>
-          <Field label={`Service radius (${cinfo.unit === 'km' ? 'km' : 'miles'})`}>
-            <input type="number" min="1" value={displayRadius(f.serviceRadiusMi, country)} onChange={(e) => set('serviceRadiusMi', toMiles(e.target.value, country))} />
+          <Field label={`Service radius (${cinfo.unit === 'km' ? 'km' : 'miles'})${hasOutline('primary') ? ' — not used: coverage outline drawn' : ''}`}>
+            <input type="number" min="1" value={displayRadius(f.serviceRadiusMi, country)} onChange={(e) => set('serviceRadiusMi', toMiles(e.target.value, country))} disabled={hasOutline('primary')} />
           </Field>
           <Field label="Primary contact"><input value={f.primaryContact || ''} onChange={(e) => set('primaryContact', e.target.value)} /></Field>
           <Field label="Contact title"><input value={f.primaryContactTitle || ''} onChange={(e) => set('primaryContactTitle', e.target.value)} /></Field>
@@ -610,12 +664,35 @@ function StationForm({ station, onClose }) {
         </div>
 
         <div className="locate-row">
-          <button type="button" className="ghost" onClick={locate} disabled={locating}>
+          <button type="button" className="ghost" onClick={locate} disabled={locating || drawTarget != null}>
             {locating ? 'Locating…' : '📍 Locate address & preview radius'}
           </button>
+          {drawTarget == null && (
+            <button type="button" className="ghost" onClick={() => startDraw('primary')} disabled={!(parseFloat(f.lat) && parseFloat(f.lng))}
+              title={parseFloat(f.lat) ? 'Outline the area this station covers instead of using a radius' : 'Locate the address first'}>
+              ✏️ {hasOutline('primary') ? 'Edit coverage outline' : 'Draw coverage outline'}
+            </button>
+          )}
+          {drawTarget == null && hasOutline('primary') && (
+            <button type="button" className="ghost" onClick={() => removeOutline('primary')}>Remove outline (use radius)</button>
+          )}
           {geoMsg && <span className="muted">{geoMsg}</span>}
         </div>
-        <LocatePreview lat={parseFloat(f.lat)} lng={parseFloat(f.lng)} radiusMi={parseFloat(f.serviceRadiusMi) || 25} areas={f.serviceAreas || []} />
+        {drawTarget != null && (
+          <div className="draw-toolbar">
+            <span><b>Drawing outline for {drawLabel}.</b> Zoom in, then click the map to drop corner points around the coverage area ({draft.length} point{draft.length !== 1 ? 's' : ''}; 3+ needed).</span>
+            <button type="button" className="ghost small" onClick={() => setDraft((d) => d.slice(0, -1))} disabled={!draft.length}>Undo point</button>
+            <button type="button" className="ghost small" onClick={() => setDraft([])} disabled={!draft.length}>Clear</button>
+            <button type="button" className="ghost small" onClick={cancelDraw}>Cancel</button>
+            <button type="button" className="primary small" onClick={finishDraw} disabled={draft.length < 3}>Finish outline</button>
+          </div>
+        )}
+        <LocatePreview
+          lat={parseFloat(f.lat)} lng={parseFloat(f.lng)} radiusMi={parseFloat(f.serviceRadiusMi) || 25}
+          polygon={drawTarget === 'primary' ? null : f.coveragePolygon}
+          areas={(f.serviceAreas || []).map((a, i) => (drawTarget === i ? { ...a, polygon: null } : a))}
+          draw={drawTarget != null ? { points: draft, onAdd: (pt) => setDraft((d) => [...d, [pt.lat, pt.lng]]) } : null}
+        />
         <details className="coords-details">
           <summary>Coordinates (auto-filled from the address — only adjust if a pin lands wrong)</summary>
           <div className="form-grid">
@@ -636,10 +713,14 @@ function StationForm({ station, onClose }) {
                 <input placeholder={cinfo.postalLabel} value={a.zip || ''} onChange={(e) => setArea(i, 'zip', e.target.value)} />
                 <input type="number" min="1" title={`Radius (${cinfo.unit})`} value={displayRadius(a.radiusMi ?? 25, country)} onChange={(e) => setArea(i, 'radiusMi', toMiles(e.target.value, country))} />
                 <button type="button" className="ghost small" onClick={() => locateArea(i)} title="Locate on the map">📍</button>
+                <button type="button" className="ghost small" onClick={() => startDraw(i)} disabled={a.lat == null || drawTarget != null} title={a.lat == null ? 'Locate this area first' : 'Draw a coverage outline for this area'}>✏️</button>
                 <button type="button" className="ghost small" onClick={() => removeArea(i)} title="Remove this area">✕</button>
               </div>
               <div className="muted area-status">
-                {areaMsg[i] || (a.lat != null ? `✓ Pinned (${Number(a.lat).toFixed(3)}, ${Number(a.lng).toFixed(3)}) · ${fmtRadius(a.radiusMi || 25, country)}` : 'Not located yet — located automatically on save.')}
+                {areaMsg[i] || (a.lat != null
+                  ? `✓ Pinned (${Number(a.lat).toFixed(3)}, ${Number(a.lng).toFixed(3)}) · ${hasOutline(i) ? `drawn outline (${a.polygon.length} points)` : fmtRadius(a.radiusMi || 25, country)}`
+                  : 'Not located yet — located automatically on save.')}
+                {hasOutline(i) && drawTarget == null && <> · <button type="button" className="linkish" onClick={() => removeOutline(i)}>remove outline</button></>}
               </div>
             </div>
           ))}

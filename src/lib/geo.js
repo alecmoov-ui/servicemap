@@ -25,11 +25,27 @@ export function haversineMiles(a, b) {
 
 const hasCoords = (p) => p.lat != null && p.lng != null && !Number.isNaN(Number(p.lat)) && !Number.isNaN(Number(p.lng))
 
+// A pin covers either its radius circle or, when drawn, its outline polygon.
 export function stationPins(s) {
-  const primary = { key: s.id + ':0', label: '', address: s.serviceAddress, city: s.city, state: s.state, lat: s.lat, lng: s.lng, radiusMi: s.serviceRadiusMi || 25, primary: true }
-  const extra = (s.serviceAreas || []).map((a, i) => ({ key: `${s.id}:${i + 1}`, ...a, radiusMi: a.radiusMi || 25, primary: false }))
+  const primary = { key: s.id + ':0', label: '', address: s.serviceAddress, city: s.city, state: s.state, lat: s.lat, lng: s.lng, radiusMi: s.serviceRadiusMi || 25, polygon: validPolygon(s.coveragePolygon), primary: true }
+  const extra = (s.serviceAreas || []).map((a, i) => ({ key: `${s.id}:${i + 1}`, ...a, radiusMi: a.radiusMi || 25, polygon: validPolygon(a.polygon), primary: false }))
   return [primary, ...extra].filter(hasCoords)
 }
+
+export const validPolygon = (poly) => (Array.isArray(poly) && poly.length >= 3 ? poly : null)
+
+// Ray-casting point-in-polygon on [lat, lng] pairs (fine at service-area scale).
+export function pointInPolygon(point, poly) {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i], [yj, xj] = poly[j]
+    const intersect = yi > point.lat !== yj > point.lat && point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+export const pinCovers = (point, pin) => (pin.polygon ? pointInPolygon(point, pin.polygon) : haversineMiles(point, pin) <= pin.radiusMi)
 
 // Distinct states covered by a station (primary + areas), A→Z.
 export function stationStates(s) {
@@ -42,7 +58,7 @@ export function coveringPin(point, s) {
   let best = null
   for (const pin of stationPins(s)) {
     const d = haversineMiles(point, pin)
-    if (d <= pin.radiusMi && (!best || d < best.distanceMi)) best = { pin, distanceMi: d }
+    if (pinCovers(point, pin) && (!best || d < best.distanceMi)) best = { pin, distanceMi: d }
   }
   return best
 }
