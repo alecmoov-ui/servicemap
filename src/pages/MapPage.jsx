@@ -203,7 +203,7 @@ export default function MapPage() {
                         <b>{[c.name, c.phone, c.email].filter(Boolean).join(' · ') || '—'}</b>
                       </div>
                     ))}
-                    <div className="kv"><span>Radius</span><b>{fmtRadius(s.viaPin.radiusMi, region)}{!s.viaPin.primary ? ` (${pinLabel(s.viaPin)})` : ''}</b></div>
+                    <div className="kv"><span>Coverage</span><b>{s.viaPin.polygon ? 'Drawn outline' : `${fmtRadius(s.viaPin.radiusMi, region)} radius`}{!s.viaPin.primary ? ` (${pinLabel(s.viaPin)})` : ''}</b></div>
                     {stationPins(s).length > 1 && (
                       <div className="kv"><span>Locations</span><b>{stationPins(s).map((p) => p.primary ? `${s.city}, ${s.state}` : pinLabel(p)).join(' · ')}</b></div>
                     )}
