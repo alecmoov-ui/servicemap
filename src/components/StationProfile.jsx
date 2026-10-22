@@ -12,9 +12,44 @@ const DOC_LABELS = { contract: 'Service Contract', schedule_a: 'Schedule A (Prof
 const yn = (v) => (v ? 'Yes' : 'No')
 const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v)
 
+// One clean address line from parts that may overlap (people often type the full
+// address into the street field): split on commas, trim, drop blanks and repeats,
+// drop a province/state code when its full name is already present, postal code last.
+const REGION_NAMES = {
+  AB: 'alberta', BC: 'british columbia', MB: 'manitoba', NB: 'new brunswick', NL: 'newfoundland and labrador', NS: 'nova scotia',
+  NT: 'northwest territories', NU: 'nunavut', ON: 'ontario', PE: 'prince edward island', QC: 'quebec', SK: 'saskatchewan', YT: 'yukon',
+  AL: 'alabama', AK: 'alaska', AZ: 'arizona', AR: 'arkansas', CA: 'california', CO: 'colorado', CT: 'connecticut', DE: 'delaware',
+  FL: 'florida', GA: 'georgia', HI: 'hawaii', ID: 'idaho', IL: 'illinois', IN: 'indiana', IA: 'iowa', KS: 'kansas', KY: 'kentucky',
+  LA: 'louisiana', ME: 'maine', MD: 'maryland', MA: 'massachusetts', MI: 'michigan', MN: 'minnesota', MS: 'mississippi', MO: 'missouri',
+  MT: 'montana', NE: 'nebraska', NV: 'nevada', NH: 'new hampshire', NJ: 'new jersey', NM: 'new mexico', NY: 'new york',
+  NC: 'north carolina', ND: 'north dakota', OH: 'ohio', OK: 'oklahoma', OR: 'oregon', PA: 'pennsylvania', RI: 'rhode island',
+  SC: 'south carolina', SD: 'south dakota', TN: 'tennessee', TX: 'texas', UT: 'utah', VT: 'vermont', VA: 'virginia', WA: 'washington',
+  WV: 'west virginia', WI: 'wisconsin', WY: 'wyoming', DC: 'district of columbia',
+}
+const POSTAL = /^(?:[A-Z]\d[A-Z]\s?\d[A-Z]\d|\d{5}(?:-\d{4})?)$/i
+const fold = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+export function formatAddress(...parts) {
+  const seen = new Set()
+  const out = []
+  for (const part of parts.flatMap((v) => String(v || '').split(','))) {
+    const t = part.trim().replace(/\s+/g, ' ')
+    const k = fold(t)
+    if (!t || seen.has(k)) continue
+    seen.add(k)
+    out.push(t)
+  }
+  const names = new Set(out.map(fold))
+  const kept = out.filter((t) => !(t.length === 2 && REGION_NAMES[t.toUpperCase()] && names.has(REGION_NAMES[t.toUpperCase()])))
+  const postal = kept.filter((t) => POSTAL.test(t))
+  return [...kept.filter((t) => !POSTAL.test(t)), ...postal].join(', ')
+}
+
+// Label column + value column (grid, see .profile .row): every row lines up the same
+// way whether the value is a number or a three-line address.
 function Row({ label, value }) {
+  const empty = value === null || value === undefined || value === ''
   return (
-    <div className="kv"><span>{label}</span><b>{dash(value)}</b></div>
+    <div className="row"><span className="row-label">{label}</span><span className={empty ? 'row-value none' : 'row-value'}>{dash(value)}</span></div>
   )
 }
 
@@ -40,11 +75,12 @@ export default function StationProfile({ station: s, onClose, onEdit }) {
         <div className="profile-head">
           <div>
             <h3>{s.company}</h3>
-            <div className="muted">
-              {[s.serviceAddress, s.city, s.state, s.zip].filter(Boolean).join(', ')} · {info.flag} {info.label}
-              {' · '}<span className={'badge ' + s.status}>{s.status}</span>
+            <div className="profile-meta">
+              <span>{formatAddress(s.serviceAddress, s.city, s.state, s.zip)}</span>
+              <span className="tag">{info.label}</span>
+              <span className={'badge ' + s.status}>{s.status}</span>
               {s.compliance && s.compliance.level !== 'ok' && (
-                <> · <span className={'badge ' + complianceClass(s.compliance.level)} title={issueText(s.compliance)}>{complianceLabel(s.compliance.level)}</span></>
+                <span className={'badge ' + complianceClass(s.compliance.level)} title={issueText(s.compliance)}>{complianceLabel(s.compliance.level)}</span>
               )}
             </div>
           </div>
@@ -60,13 +96,14 @@ export default function StationProfile({ station: s, onClose, onEdit }) {
             <Row label="Preferred contact" value={s.preferredContact} />
             <Row label="After hours" value={yn(s.afterHours)} />
             {(s.contacts || []).map((c, i) => (
-              <Row key={i} label={c.title || 'Contact'} value={[c.name, c.phone, c.email].filter(Boolean).join(' · ')} />
+              <Row key={i} label={c.title || 'Contact'}
+                value={<>{c.name || '—'}{(c.phone || c.email) && <><br /><span className="row-sub">{[c.phone, c.email].filter(Boolean).join(' · ')}</span></>}</>} />
             ))}
 
             <div className="label-row">Addresses</div>
-            <Row label="Service" value={[s.serviceAddress, s.city, s.state, s.zip].filter(Boolean).join(', ')} />
-            <Row label="Billing" value={s.billingAddress} />
-            <Row label="Shipping" value={s.shippingAddress} />
+            <Row label="Service" value={formatAddress(s.serviceAddress, s.city, s.state, s.zip)} />
+            <Row label="Billing" value={formatAddress(s.billingAddress)} />
+            <Row label="Shipping" value={formatAddress(s.shippingAddress)} />
 
             <div className="label-row">Business</div>
             <Row label="Tax ID / EIN" value={s.taxId} />
@@ -133,7 +170,7 @@ export default function StationProfile({ station: s, onClose, onEdit }) {
             {events.length > 8 && <div className="muted">Showing the 8 most recent of {events.length} entries.</div>}
           </div>
         )}
-        {s.notes && (<><div className="label-row">Notes</div><div className="muted">{s.notes}</div></>)}
+        {s.notes && (<><div className="label-row">Notes</div><div className="profile-notes">{s.notes}</div></>)}
 
         <div className="modal-actions">
           <button className="ghost" onClick={onClose}>Close</button>

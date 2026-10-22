@@ -85,7 +85,7 @@ export default function StationsPage() {
       <section className="master">
         <div className="master-head">
           <h3>
-            {info.flag} {info.label} station list{' '}
+            {info.label} station list{' '}
             <span className="muted">{stateFilter ? `${countLabel(visible, stateFilter)} in ${stateFilter} · ${countLabel(stations)} total` : countLabel(stations)}</span>
           </h3>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -632,7 +632,7 @@ function StationForm({ station, onClose }) {
         <div className="form-grid">
           <Field label="Region (which division's map this station appears on)">
             <select value={country} onChange={(e) => set('country', e.target.value)}>
-              {REGIONS.map((r) => <option key={r.key} value={r.key}>{r.flag} {r.label}</option>)}
+              {REGIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
             </select>
           </Field>
           <Field label="Company (legal)"><input value={f.company} onChange={(e) => set('company', e.target.value)} /></Field>
