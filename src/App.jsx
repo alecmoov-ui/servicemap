@@ -68,7 +68,7 @@ function Shell() {
         <div className="region-switch" title="Which division's network to show">
           {REGIONS.map((r) => (
             <button key={r.key} className={region === r.key ? 'seg active' : 'seg'} onClick={() => setRegion(r.key)}>
-              {r.flag} {r.label}
+              {r.label}
             </button>
           ))}
         </div>

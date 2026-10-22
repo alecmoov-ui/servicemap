@@ -59,7 +59,7 @@ export default function UsersPage() {
                   <td><b>{u.name}</b>{u.id === user.id && <span className="tag added-tag">you</span>}</td>
                   <td>{u.email}</td>
                   <td><span className="badge active">{ROLES[u.role]?.label || u.role}</span></td>
-                  <td title="Home region — the map this user's app opens on">{regionInfo(u.country).flag} {regionInfo(u.country).label}</td>
+                  <td title="Home region — the map this user's app opens on">{regionInfo(u.country).label}</td>
                   <td className="muted">{u.createdAt ? String(u.createdAt).slice(0, 10) : '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="ghost small" onClick={() => setEditing(u)}>Edit</button>{' '}
@@ -161,7 +161,7 @@ function UserForm({ user, onClose, onSaved }) {
         <label className="field">
           <span>Country (home region — which map the app opens on)</span>
           <select value={f.country} onChange={(e) => set('country', e.target.value)}>
-            {REGIONS.map((r) => <option key={r.key} value={r.key}>{r.flag} {r.label}</option>)}
+            {REGIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
           </select>
         </label>
         <label className="field">
