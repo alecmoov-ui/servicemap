@@ -422,9 +422,14 @@ function ServiceLogModal({ station, onClose }) {
 
 // --- Backups ---------------------------------------------------------------
 
+const snapshotKind = (name) =>
+  name.includes('-auto-') ? 'automatic (daily)' : name.includes('-preimport-') ? 'before import' : name.includes('-prerestore-') ? 'before restore' : 'manual'
+
 function BackupsModal({ onClose }) {
+  const { refresh } = useApp()
   const [snaps, setSnaps] = useState([])
   const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(null)
   const load = () => api.getSnapshots().then(setSnaps).catch(() => {})
   useEffect(() => { load() }, [])
 
@@ -433,26 +438,44 @@ function BackupsModal({ onClose }) {
     try { await api.createSnapshot(); load() } catch (e) { alert(e.message) } finally { setBusy(false) }
   }
 
+  async function restore(s) {
+    const when = new Date(s.at).toLocaleString()
+    if (!confirm(`Roll ALL station data back to the snapshot from ${when}?\n\nStations, service areas, service log and document records will be exactly as they were then. Edits made since are undone (a safety snapshot of the current state is taken first, so you can come back). Users are not affected.`)) return
+    setBusy(true); setDone(null)
+    try {
+      const r = await api.restoreSnapshot(s.name)
+      await refresh() // Map, Coverage, Analytics, list all re-read the restored data
+      setDone(`Restored the snapshot from ${when} — ${r.counts.stations} stations. The previous state was saved as ${r.safety}.`)
+      load()
+    } catch (e) { alert(e.message) } finally { setBusy(false) }
+  }
+
   return (
     <div className="modal-backdrop">
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>Database backups</h3>
         <p className="muted">
-          Snapshots are full database save-points. Combined with the weekly scheduled backup and the CSV
-          export, these are your data rollback points. Restoring is an ops step (see README).
+          Snapshots are full save-points of the station data. One is taken <b>automatically every day</b>, before
+          every <b>import</b>, and before every <b>restore</b>; create one by hand before risky changes. <b>Restore</b> rolls
+          the data back to that moment in place (users and the activity log are kept).
         </p>
         <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
-          <button className="primary" onClick={create} disabled={busy}>{busy ? 'Creating…' : 'Create snapshot now'}</button>
+          <button className="primary" onClick={create} disabled={busy}>{busy ? 'Working…' : 'Create snapshot now'}</button>
+          <button className="ghost" onClick={onClose} disabled={busy}>Close</button>
         </div>
+        {done && <div className="muted" style={{ color: 'var(--green)', marginTop: 8 }}>✓ {done}</div>}
         <div className="table-wrap" style={{ marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
           <table className="table">
-            <thead><tr><th>Snapshot</th><th>When</th><th></th></tr></thead>
+            <thead><tr><th>When</th><th>Type</th><th></th></tr></thead>
             <tbody>
               {snaps.map((s) => (
                 <tr key={s.name}>
-                  <td style={{ fontSize: 12 }}>{s.name}</td>
-                  <td className="muted">{new Date(s.at).toLocaleString()}</td>
-                  <td><button className="ghost small" onClick={() => api.download(`/admin/snapshots/${s.name}/download`, s.name)}>Download</button></td>
+                  <td title={s.name}><b>{new Date(s.at).toLocaleString()}</b></td>
+                  <td className="muted">{snapshotKind(s.name)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="primary small" onClick={() => restore(s)} disabled={busy}>Restore</button>{' '}
+                    <button className="ghost small" onClick={() => api.download(`/admin/snapshots/${s.name}/download`, s.name)} title="Download the raw database file (for safekeeping — not meant to be opened)">⬇</button>
+                  </td>
                 </tr>
               ))}
               {snaps.length === 0 && <tr><td colSpan={3} className="muted" style={{ padding: 12 }}>No snapshots yet.</td></tr>}

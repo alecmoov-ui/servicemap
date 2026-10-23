@@ -434,3 +434,32 @@ test('coverage outlines: polygon round-trip on station + area, normalisation, CS
   assert.equal(after.serviceAreas[0].city, 'Marco Island')
   assert.deepEqual(after.serviceAreas[0].polygon, [[26, -81.8], [26, -81.6], [25.8, -81.7]])
 })
+
+test('backups: restore rolls station data back to a snapshot (safety snapshot first, users untouched)', async () => {
+  const token = await tokenFor('admin@moovpool.com')
+  const before = (await api('/api/stations', { token })).data.find((s) => s.id === 'st_02')
+  const snap = await api('/api/admin/snapshot', { method: 'POST', token })
+  assert.equal(snap.status, 201)
+
+  // Damage: rename a station, add a service-log entry, create a station.
+  await api('/api/stations/st_02', { method: 'PUT', token, body: { company: 'WRONG NAME', phone: '000' } })
+  await api('/api/stations/st_02/service-events', { method: 'POST', token, body: { accepted: true, completed: true, completionDays: 1 } })
+  const extra = (await api('/api/stations', { method: 'POST', token, body: { company: 'Should Vanish', city: 'X', state: 'TX', lat: 30, lng: -97, products: {} } })).data
+  const sales = await tokenFor('sales@moovpool.com')
+  assert.equal((await api(`/api/admin/snapshots/${snap.data.name}/restore`, { method: 'POST', token: sales })).status, 403)
+  assert.equal((await api('/api/admin/snapshots/nope.db/restore', { method: 'POST', token })).status, 404)
+
+  const r = await api(`/api/admin/snapshots/${snap.data.name}/restore`, { method: 'POST', token })
+  assert.equal(r.status, 200)
+  assert.match(r.data.safety, /prerestore/)
+  const after = (await api('/api/stations', { token })).data
+  const st02 = after.find((s) => s.id === 'st_02')
+  assert.equal(st02.company, before.company)
+  assert.equal(st02.phone, before.phone)
+  assert.equal(st02.perf.jobsCompleted, before.perf.jobsCompleted)
+  assert.ok(!after.some((s) => s.id === extra.id))
+  // Users and sessions survive; the restore is in the activity log; safety snapshot listed.
+  assert.equal((await api('/api/auth/me', { token })).status, 200)
+  assert.ok((await api('/api/activity', { token })).data.some((e) => e.action === 'data.restore'))
+  assert.ok((await api('/api/admin/snapshots', { token })).data.some((s) => s.name === r.data.safety))
+})
