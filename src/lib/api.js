@@ -7,9 +7,18 @@ const TOKEN_KEY = 'moov.token'
 export const getToken = () => localStorage.getItem(TOKEN_KEY)
 export const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY))
 
+// Active region (US | CA), kept in sync by AppContext. Sent as X-Region on every call so
+// the server refuses writes to the other division's stations (stale tab, wrong view).
+let activeRegion = 'US'
+export const setActiveRegion = (r) => { activeRegion = r === 'CA' ? 'CA' : 'US' }
+const authHeaders = () => {
+  const h = { 'X-Region': activeRegion }
+  if (getToken()) h.Authorization = `Bearer ${getToken()}`
+  return h
+}
+
 async function request(path, { method = 'GET', body, auth = true } = {}) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (auth && getToken()) headers.Authorization = `Bearer ${getToken()}`
+  const headers = { 'Content-Type': 'application/json', ...(auth ? authHeaders() : {}) }
   const res = await fetch('/api' + path, {
     method,
     headers,
@@ -57,8 +66,7 @@ export const api = {
     const fd = new FormData()
     fd.append('docType', docType)
     fd.append('file', file)
-    const headers = {}
-    if (getToken()) headers.Authorization = `Bearer ${getToken()}`
+    const headers = authHeaders()
     const res = await fetch(`/api/stations/${id}/documents`, { method: 'POST', headers, body: fd })
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Upload failed')
     return res.json()
@@ -87,8 +95,7 @@ export const api = {
   async importStations(file, country = 'US') {
     const fd = new FormData()
     fd.append('file', file)
-    const headers = {}
-    if (getToken()) headers.Authorization = `Bearer ${getToken()}`
+    const headers = authHeaders()
     const res = await fetch('/api/stations/import?country=' + country, { method: 'POST', headers, body: fd })
     const data = await res.json().catch(() => ({}))
     // 200 = applied (maybe with row errors); 422 = nothing applied — both carry a summary.
@@ -98,7 +105,7 @@ export const api = {
 
   // Data protection
   getSnapshots: () => request('/admin/snapshots'),
-  restoreSnapshot: (name) => request(`/admin/snapshots/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
+  restoreSnapshot: (name, country) => request(`/admin/snapshots/${encodeURIComponent(name)}/restore?country=${country}`, { method: 'POST' }),
   createSnapshot: () => request('/admin/snapshot', { method: 'POST' }),
 
   geocode: (q, country = 'US') => request('/geocode?q=' + encodeURIComponent(q) + '&country=' + country),

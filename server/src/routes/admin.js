@@ -37,11 +37,14 @@ adminRouter.get('/snapshots/:name/download', (req, res) => {
   createReadStream(path).pipe(res)
 })
 
-// Roll station data back to a snapshot (a "prerestore" safety snapshot is taken first).
+// Roll ONE region's station data back to a snapshot (?country=US|CA; ALL = everything).
+// A "prerestore" safety snapshot is taken first.
 adminRouter.post('/snapshots/:name/restore', async (req, res) => {
+  const country = req.query.country
+  if (!['US', 'CA', 'ALL'].includes(country)) return res.status(400).json({ error: 'Specify which region to restore: ?country=US, CA or ALL.' })
   try {
-    const result = await restoreSnapshot(req.params.name)
-    logFromReq(req, { action: 'data.restore', entityType: 'session', summary: `Restored snapshot ${result.restored} (safety copy ${result.safety})` })
+    const result = await restoreSnapshot(req.params.name, country)
+    logFromReq(req, { action: 'data.restore', entityType: 'session', summary: `Restored ${country === 'ALL' ? 'ALL data' : country + ' stations'} from snapshot ${result.restored} (safety copy ${result.safety})` })
     res.json(result)
   } catch (e) {
     res.status(e.message === 'Snapshot not found' ? 404 : 400).json({ error: e.message })

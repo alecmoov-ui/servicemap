@@ -115,6 +115,20 @@ addresses, uses **kilometres** for radii and distances (stored internally in mil
 "Province"/"Postal code", and has its own metro list for gap analysis (`src/data/metros.ca.js`).
 CSV export/import are per region: the Canadian file has a `Service Radius (km)` column.
 
+**Division isolation (checks and balances).** Nothing done in one region's view can change
+the other's data:
+- Export, template and import always name the region (no default). An import only touches
+  that region's stations: rows whose ID or `Country` belongs to the other division are skipped
+  and listed; a file that is entirely the other division's is refused with a message; a
+  company-name match is only looked up within the region; import never moves a station
+  between regions; an unrecognised `Country` value is an error, never a guess.
+- Every write from the app carries the active region; the server refuses (409) edits,
+  deletes, merges, service-log entries and document changes on a station that belongs to the
+  other division. Creating a station files it under the active region.
+- **Backups → Restore** rolls back only the region selected in the header; the other
+  division's stations, users and the activity log are untouched (`?country=ALL` exists for
+  full disaster recovery via the API).
+
 ### Stations
 The **master station list** with the full Schedule A profile (identity, location +
 radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:

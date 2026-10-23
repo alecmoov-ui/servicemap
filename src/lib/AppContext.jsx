@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
-import { api, getToken, setToken } from './api.js'
+import { api, getToken, setToken, setActiveRegion } from './api.js'
 
 const Ctx = createContext(null)
 
@@ -12,6 +12,7 @@ export function AppProvider({ children }) {
   // opens on the signed-in user's home country and can be flipped in the header.
   const [region, setRegion] = useState('US')
   useEffect(() => { if (user?.country) setRegion(user.country) }, [user?.id, user?.country])
+  useEffect(() => { setActiveRegion(region) }, [region])
   const stations = useMemo(() => allStations.filter((s) => (s.country || 'US') === region), [allStations, region])
   const [error, setError] = useState(null)
 

@@ -26,7 +26,9 @@ const DATA_TABLES = ['stations', 'service_events', 'station_documents', 'station
 //  1. take a safety snapshot of the current state ("prerestore"),
 //  2. ATTACH the snapshot and copy each data table over inside one transaction
 //     (only columns both schemas share, so an older snapshot still restores).
-export async function restoreSnapshot(name) {
+// `country` = 'US' | 'CA' restores ONLY that division's stations (the other division's
+// data is untouched); 'ALL' restores everything (disaster recovery).
+export async function restoreSnapshot(name, country = 'ALL') {
   const safe = String(name).replace(/[^a-zA-Z0-9._-]/g, '')
   const path = join(BACKUP_DIR, safe)
   if (!safe.endsWith('.db') || !existsSync(path)) throw new Error('Snapshot not found')
@@ -36,28 +38,45 @@ export async function restoreSnapshot(name) {
   probe.close()
   if (!hasStations) throw new Error('That file is not a Service Network snapshot')
 
+  if (!['US', 'CA', 'ALL'].includes(country)) throw new Error('Region must be US, CA or ALL')
   const safety = await createSnapshot('prerestore')
   db.exec(`ATTACH DATABASE '${path.replace(/'/g, "''")}' AS snap`)
   try {
     db.pragma('foreign_keys = OFF')
+    const snapHasCountry = db.prepare(`PRAGMA snap.table_info(stations)`).all().some((c) => c.name === 'country')
     db.transaction(() => {
-      for (const t of [...DATA_TABLES].reverse()) db.exec(`DELETE FROM ${t}`)
-      for (const t of DATA_TABLES) {
+      const scoped = country !== 'ALL'
+      // Which stations are in scope on the live side and in the snapshot.
+      const liveWhere = scoped ? `WHERE country = '${country}'` : ''
+      const snapWhere = scoped ? (snapHasCountry ? `WHERE country = '${country}'` : country === 'US' ? '' : 'WHERE 0') : ''
+      // 1. remove in-scope live rows (children first)
+      db.exec(`DELETE FROM service_events WHERE station_id IN (SELECT id FROM stations ${liveWhere})`)
+      db.exec(`DELETE FROM station_documents WHERE station_id IN (SELECT id FROM stations ${liveWhere})`)
+      db.exec(`DELETE FROM stations ${liveWhere}`)
+      if (!scoped) db.exec('DELETE FROM station_imports')
+      // 2. copy in-scope snapshot rows (only columns both schemas share)
+      const copy = (t, where) => {
         const inSnap = db.prepare(`SELECT 1 FROM snap.sqlite_master WHERE type = 'table' AND name = ?`).get(t)
-        if (!inSnap) continue
+        if (!inSnap) return
         const live = new Set(db.prepare(`PRAGMA main.table_info(${t})`).all().map((c) => c.name))
         const cols = db.prepare(`PRAGMA snap.table_info(${t})`).all().map((c) => c.name).filter((c) => live.has(c))
-        if (!cols.length) continue
+        if (!cols.length) return
         const list = cols.join(', ')
-        db.exec(`INSERT INTO main.${t} (${list}) SELECT ${list} FROM snap.${t}`)
+        db.exec(`INSERT INTO main.${t} (${list}) SELECT ${list} FROM snap.${t} ${where}`)
       }
+      copy('stations', snapWhere)
+      const childWhere = scoped ? `WHERE station_id IN (SELECT id FROM snap.stations ${snapWhere})` : ''
+      copy('service_events', childWhere)
+      copy('station_documents', childWhere)
+      if (!scoped) copy('station_imports', '')
     })()
   } finally {
     db.pragma('foreign_keys = ON')
     db.exec('DETACH DATABASE snap')
   }
   const counts = Object.fromEntries(DATA_TABLES.map((t) => [t, db.prepare(`SELECT COUNT(*) n FROM ${t}`).get().n]))
-  return { restored: safe, safety, counts }
+  if (country !== 'ALL') counts.stations = db.prepare('SELECT COUNT(*) n FROM stations WHERE country = ?').get(country).n
+  return { restored: safe, safety, region: country, counts }
 }
 
 // Automatic save-points: one per day (tagged "auto"), keeping the most recent KEEP.
