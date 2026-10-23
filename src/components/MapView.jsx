@@ -5,6 +5,7 @@ import L from 'leaflet'
 import { starRating } from '../lib/ratings.js'
 import { stationPins, pinLabel } from '../lib/geo.js'
 import { fmtRadius, region as regionInfo } from '../lib/units.js'
+import CopyCard from './CopyCard.jsx'
 
 // Colored pin icons (no local image assets needed).
 function pin(color) {
@@ -73,7 +74,7 @@ export default function MapView({ stations, matches, consumer, selectedId, onSel
               eventHandlers={{ click: () => onSelect?.(s.id) }}
             >
               <Popup>
-                <strong>{s.company}</strong>
+                <strong>{s.company}</strong> <CopyCard station={s} />
                 <br />
                 {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.polygon ? 'drawn outline' : `${fmtRadius(p.radiusMi, region)} radius`}
                 {!p.primary && <><br /><em>Additional location of {s.city}, {s.state}</em></>}

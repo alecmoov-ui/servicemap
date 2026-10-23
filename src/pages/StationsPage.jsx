@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import StationProfile from '../components/StationProfile.jsx'
+import CopyCard from '../components/CopyCard.jsx'
 import { useApp } from '../lib/AppContext.jsx'
 import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
@@ -117,6 +118,7 @@ export default function StationsPage() {
                 <tr key={s.id}>
                   <td>
                     <button className="linkish strong" onClick={() => setProfile(s)} title="Open station profile">{s.company}</button>
+                    {' '}<CopyCard station={s} />
                   </td>
                   <td>
                     {s.city}

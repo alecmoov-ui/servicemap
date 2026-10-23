@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { MapContainer, TileLayer, Circle, Polygon, CircleMarker, Marker, Popup } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 import StationProfile from '../components/StationProfile.jsx'
+import CopyCard from '../components/CopyCard.jsx'
 import { TILE_OPTIONS } from '../lib/tiles.js'
 import L from 'leaflet'
 import { useStations, useApp } from '../lib/useStore.js'
@@ -163,7 +164,7 @@ export default function CoveragePage() {
               pathOptions={{ color: '#0f6b39', fillColor: '#0f6b39', fillOpacity: 1, weight: 1 }}
             >
               <Popup>
-                <strong>{s.company}</strong>
+                <strong>{s.company}</strong> <CopyCard station={s} />
                 <br />
                 {p.primary ? `${s.city}, ${s.state}` : pinLabel(p)} · {p.polygon ? 'drawn outline' : fmtRadius(p.radiusMi, region)}
                 <div className="popup-actions">
