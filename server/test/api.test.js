@@ -121,14 +121,14 @@ test('service log: dtm can log, view-only roles cannot; performance is recompute
 
 test('CSV export: allowed for admin/dtm, denied for dispatch', async () => {
   const adminToken = await tokenFor('admin@moovpool.com')
-  const res = await fetch(base + '/api/stations/export.csv', { headers: { Authorization: `Bearer ${adminToken}` } })
+  const res = await fetch(base + '/api/stations/export.csv?country=US', { headers: { Authorization: `Bearer ${adminToken}` } })
   assert.equal(res.status, 200)
   assert.match(res.headers.get('content-type'), /csv/)
   const text = await res.text()
   assert.match(text, /Company,Service Address/)
 
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
-  const denied = await fetch(base + '/api/stations/export.csv', { headers: { Authorization: `Bearer ${dispatchToken}` } })
+  const denied = await fetch(base + '/api/stations/export.csv?country=US', { headers: { Authorization: `Bearer ${dispatchToken}` } })
   assert.equal(denied.status, 403)
 })
 
@@ -228,7 +228,7 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
 
   const fd = new FormData()
   fd.append('file', new Blob([csv], { type: 'text/csv' }), 'stations.csv')
-  const res = await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${adminToken}` }, body: fd })
+  const res = await fetch(base + '/api/stations/import?country=US', { method: 'POST', headers: { Authorization: `Bearer ${adminToken}` }, body: fd })
   const data = await res.json()
   assert.equal(res.status, 200)
   assert.equal(data.created, 1)
@@ -250,7 +250,7 @@ test('bulk import: creates new and updates existing (matched by ID); dispatch ro
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
   const fd2 = new FormData()
   fd2.append('file', new Blob([csv], { type: 'text/csv' }), 'stations.csv')
-  const denied = await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${dispatchToken}` }, body: fd2 })
+  const denied = await fetch(base + '/api/stations/import?country=US', { method: 'POST', headers: { Authorization: `Bearer ${dispatchToken}` }, body: fd2 })
   assert.equal(denied.status, 403)
 })
 
@@ -285,7 +285,7 @@ test('multi-location stations: serviceAreas round-trip, export column, import pa
 
   // Export carries the areas column; import parses it (lat/lng given, so no geocoding).
   await api(`/api/stations/${created.data.id}`, { method: 'PUT', token, body: { serviceAreas: areas } })
-  const csvRes = await fetch(base + '/api/stations/export.csv', { headers: { Authorization: `Bearer ${token}` } })
+  const csvRes = await fetch(base + '/api/stations/export.csv?country=US', { headers: { Authorization: `Bearer ${token}` } })
   const csv = await csvRes.text()
   assert.match(csv, /Additional Service Areas/)
   assert.match(csv, /Naples branch \| 1 Main St \| Naples \| FL \| 30 mi \| 26.14 \| -81.79/)
@@ -296,7 +296,7 @@ test('multi-location stations: serviceAreas round-trip, export column, import pa
   ].join('\n')
   const fd = new FormData()
   fd.append('file', new Blob([importCsv], { type: 'text/csv' }), 'areas.csv')
-  const imp = await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+  const imp = await fetch(base + '/api/stations/import?country=US', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
   assert.equal((await imp.json()).updated, 1)
   const after = (await api('/api/stations', { token })).data.find((s) => s.id === created.data.id)
   assert.equal(after.serviceAreas.length, 2)
@@ -427,7 +427,7 @@ test('coverage outlines: polygon round-trip on station + area, normalisation, CS
   ].join('\n')
   const fd = new FormData()
   fd.append('file', new Blob([importCsv], { type: 'text/csv' }), 'outline.csv')
-  const imp = await (await fetch(base + '/api/stations/import', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })).json()
+  const imp = await (await fetch(base + '/api/stations/import?country=US', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })).json()
   assert.equal(imp.errors.length, 0)
   const after = (await api('/api/stations', { token })).data.find((s) => s.id === created.data.id)
   assert.deepEqual(after.coveragePolygon, [[27, -82], [27, -81.5], [26.6, -81.7]])
@@ -446,10 +446,11 @@ test('backups: restore rolls station data back to a snapshot (safety snapshot fi
   await api('/api/stations/st_02/service-events', { method: 'POST', token, body: { accepted: true, completed: true, completionDays: 1 } })
   const extra = (await api('/api/stations', { method: 'POST', token, body: { company: 'Should Vanish', city: 'X', state: 'TX', lat: 30, lng: -97, products: {} } })).data
   const sales = await tokenFor('sales@moovpool.com')
-  assert.equal((await api(`/api/admin/snapshots/${snap.data.name}/restore`, { method: 'POST', token: sales })).status, 403)
-  assert.equal((await api('/api/admin/snapshots/nope.db/restore', { method: 'POST', token })).status, 404)
+  assert.equal((await api(`/api/admin/snapshots/${snap.data.name}/restore?country=ALL`, { method: 'POST', token: sales })).status, 403)
+  assert.equal((await api('/api/admin/snapshots/nope.db/restore?country=ALL', { method: 'POST', token })).status, 404)
 
-  const r = await api(`/api/admin/snapshots/${snap.data.name}/restore`, { method: 'POST', token })
+  assert.equal((await api(`/api/admin/snapshots/${snap.data.name}/restore`, { method: 'POST', token })).status, 400) // region required
+  const r = await api(`/api/admin/snapshots/${snap.data.name}/restore?country=ALL`, { method: 'POST', token })
   assert.equal(r.status, 200)
   assert.match(r.data.safety, /prerestore/)
   const after = (await api('/api/stations', { token })).data
@@ -462,4 +463,76 @@ test('backups: restore rolls station data back to a snapshot (safety snapshot fi
   assert.equal((await api('/api/auth/me', { token })).status, 200)
   assert.ok((await api('/api/activity', { token })).data.some((e) => e.action === 'data.restore'))
   assert.ok((await api('/api/admin/snapshots', { token })).data.some((s) => s.name === r.data.safety))
+})
+
+test('region isolation: export/import/restore are per division; writes from the other view are refused', async () => {
+  const token = await tokenFor('admin@moovpool.com')
+  const apiR = (path, opts = {}, region) => fetch(base + path, {
+    method: opts.method || 'GET',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(region ? { 'X-Region': region } : {}) },
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null) }))
+
+  // Region is mandatory on export/template/import — no silent default.
+  assert.equal((await fetch(base + '/api/stations/export.csv', { headers: { Authorization: `Bearer ${token}` } })).status, 400)
+  assert.equal((await fetch(base + '/api/stations/import-template.csv', { headers: { Authorization: `Bearer ${token}` } })).status, 400)
+
+  const ca = (await api('/api/stations', { method: 'POST', token, body: { company: 'Iso Canada Co', city: 'Laval', state: 'QC', country: 'CA', lat: 45.6, lng: -73.7, serviceRadiusMi: 20, products: { pumps: true } } })).data
+  const usBefore = (await api('/api/stations', { token })).data.find((s) => s.id === 'st_03')
+
+  // 1. A US export (with IDs) re-uploaded under the CANADA view: refused, nothing touched.
+  const usCsv = await (await fetch(base + '/api/stations/export.csv?country=US', { headers: { Authorization: `Bearer ${token}` } })).text()
+  const fd = new FormData(); fd.append('file', new Blob([usCsv], { type: 'text/csv' }), 'us.csv')
+  const wrongView = await fetch(base + '/api/stations/import?country=CA', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+  assert.equal(wrongView.status, 400)
+  assert.match((await wrongView.json()).error, /only US stations/)
+
+  // 2. A mixed file under CANADA: US rows (by ID, by Country column) are skipped; CA rows apply;
+  //    a US company name without an ID becomes a NEW Canada record, never a cross-region update.
+  const mixed = [
+    'ID,Company,City,State,Lat,Lng,Country',
+    `st_03,"${usBefore.company}",HACKED,TX,30,-97,`,
+    `,"${usBefore.company}",HACKED2,TX,30,-97,`,
+    `,Some US Co,Austin,TX,30.2,-97.7,US`,
+    `,Bad Country Co,Austin,TX,30.2,-97.7,Mexico`,
+    `${ca.id},Iso Canada Co,Laval,QC,45.6,-73.7,`,
+    `,New Canada Co,Gatineau,QC,45.47,-75.7,`,
+  ].join('\n')
+  const fd2 = new FormData(); fd2.append('file', new Blob([mixed], { type: 'text/csv' }), 'mixed.csv')
+  const r2 = await (await fetch(base + '/api/stations/import?country=CA', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd2 })).json()
+  assert.equal(r2.otherRegion, 2, JSON.stringify(r2.errors))
+  assert.equal(r2.errors.length, 3) // + the unrecognised Country row
+  assert.ok(r2.errors.some((e) => /Country must be US or Canada/.test(e.message)))
+  assert.equal(r2.updated, 1)
+  assert.equal(r2.created, 2)
+  const after = (await api('/api/stations', { token })).data
+  const us = after.find((s) => s.id === 'st_03')
+  assert.equal(us.city, usBefore.city)
+  assert.equal(us.country, 'US')
+  const dup = after.filter((s) => s.company === usBefore.company)
+  assert.equal(dup.length, 2)
+  assert.ok(dup.every((s) => (s.id === 'st_03' ? s.country === 'US' : s.country === 'CA')))
+  assert.equal(after.find((s) => s.company === 'New Canada Co').country, 'CA')
+  assert.ok(!after.some((s) => s.company === 'Some US Co' || s.company === 'Bad Country Co'))
+
+  // 3. Writes carrying the active region are refused for the other division's stations.
+  assert.equal((await apiR('/api/stations/st_03', { method: 'PUT', body: { phone: '1' } }, 'CA')).status, 409)
+  assert.equal((await apiR(`/api/stations/${ca.id}`, { method: 'PUT', body: { phone: '1' } }, 'US')).status, 409)
+  assert.equal((await apiR(`/api/stations/${ca.id}`, { method: 'DELETE' }, 'US')).status, 409)
+  assert.equal((await apiR('/api/stations/st_03/service-events', { method: 'POST', body: { accepted: true } }, 'CA')).status, 409)
+  assert.equal((await apiR(`/api/stations/${ca.id}/merge`, { method: 'POST', body: { sourceIds: ['st_03'] } }, 'US')).status, 409)
+  assert.equal((await apiR(`/api/stations/${ca.id}`, { method: 'PUT', body: { phone: '1' } }, 'CA')).status, 200)
+  const created = await apiR('/api/stations', { method: 'POST', body: { company: 'Header Region Co', city: 'Kelowna', state: 'BC', lat: 49.9, lng: -119.5, products: {} } }, 'CA')
+  assert.equal(created.data.country, 'CA')
+
+  // 4. Restore is per division: rolling back CANADA leaves US edits in place.
+  const snap = (await api('/api/admin/snapshot', { method: 'POST', token })).data
+  await api(`/api/stations/${ca.id}`, { method: 'PUT', token, body: { phone: 'CA-CHANGED' } })
+  await api('/api/stations/st_03', { method: 'PUT', token, body: { phone: 'US-CHANGED' } })
+  const rr = await api(`/api/admin/snapshots/${snap.name}/restore?country=CA`, { method: 'POST', token })
+  assert.equal(rr.status, 200)
+  const final = (await api('/api/stations', { token })).data
+  assert.equal(final.find((s) => s.id === ca.id).phone, '1')
+  assert.equal(final.find((s) => s.id === 'st_03').phone, 'US-CHANGED')
+  assert.equal(final.filter((s) => s.country === 'US').length, after.filter((s) => s.country === 'US').length)
 })

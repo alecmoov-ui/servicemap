@@ -267,8 +267,9 @@ function ImportModal({ region, onClose }) {
         <p className="muted">
           Round-trip your list: <b>Export CSV</b> (or download a blank template), edit/add rows in Excel,
           then upload here (<code>.xlsx</code> or <code>.csv</code>). Rows match by the <b>ID</b> column —
-          blank ID creates a new station (address is auto-located); filled ID updates it. New rows without
-          a <b>Country</b> column are filed under <b>{info.label}</b>; the radius column is in <b>{info.unit === 'km' ? 'kilometres' : 'miles'}</b>.
+          blank ID creates a new station (address is auto-located); filled ID updates it. <b>Only {info.label} stations
+          are touched:</b> rows that belong to the other division are skipped and listed, and new rows are filed under
+          {' '}<b>{info.label}</b>. The radius column is in <b>{info.unit === 'km' ? 'kilometres' : 'miles'}</b>.
           A database snapshot is taken automatically before applying, so you can roll back.
         </p>
 
@@ -288,7 +289,8 @@ function ImportModal({ region, onClose }) {
             <div className="import-counts">
               <span className="badge active">{result.created} created</span>
               <span className="badge paused">{result.updated} updated</span>
-              {result.errors.length > 0 && <span className="badge issue">{result.errors.length} errors</span>}
+              {result.otherRegion > 0 && <span className="badge issue">{result.otherRegion} skipped (other division)</span>}
+              {result.errors.length - (result.otherRegion || 0) > 0 && <span className="badge issue">{result.errors.length - (result.otherRegion || 0)} errors</span>}
               {result.warnings.length > 0 && <span className="badge requested">{result.warnings.length} warnings</span>}
             </div>
             {(result.errors.length > 0 || result.warnings.length > 0) && (
@@ -426,7 +428,8 @@ const snapshotKind = (name) =>
   name.includes('-auto-') ? 'automatic (daily)' : name.includes('-preimport-') ? 'before import' : name.includes('-prerestore-') ? 'before restore' : 'manual'
 
 function BackupsModal({ onClose }) {
-  const { refresh } = useApp()
+  const { refresh, region } = useApp()
+  const regionName = regionInfo(region).label
   const [snaps, setSnaps] = useState([])
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(null)
@@ -440,12 +443,12 @@ function BackupsModal({ onClose }) {
 
   async function restore(s) {
     const when = new Date(s.at).toLocaleString()
-    if (!confirm(`Roll ALL station data back to the snapshot from ${when}?\n\nStations, service areas, service log and document records will be exactly as they were then. Edits made since are undone (a safety snapshot of the current state is taken first, so you can come back). Users are not affected.`)) return
+    if (!confirm(`Roll the ${regionName} station data back to the snapshot from ${when}?\n\n${regionName} stations, service areas, service log and document records will be exactly as they were then; edits made since are undone. The other division's data is NOT touched. A safety snapshot of the current state is taken first, so you can come back. Users are not affected.`)) return
     setBusy(true); setDone(null)
     try {
-      const r = await api.restoreSnapshot(s.name)
+      const r = await api.restoreSnapshot(s.name, region)
       await refresh() // Map, Coverage, Analytics, list all re-read the restored data
-      setDone(`Restored the snapshot from ${when} — ${r.counts.stations} stations. The previous state was saved as ${r.safety}.`)
+      setDone(`Restored ${regionName} data from the snapshot taken ${when} — ${r.counts.stations} stations. The previous state was saved as ${r.safety}.`)
       load()
     } catch (e) { alert(e.message) } finally { setBusy(false) }
   }
@@ -455,9 +458,10 @@ function BackupsModal({ onClose }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>Database backups</h3>
         <p className="muted">
-          Snapshots are full save-points of the station data. One is taken <b>automatically every day</b>, before
-          every <b>import</b>, and before every <b>restore</b>; create one by hand before risky changes. <b>Restore</b> rolls
-          the data back to that moment in place (users and the activity log are kept).
+          Snapshots are full save-points of the station data (both divisions). One is taken <b>automatically every
+          day</b>, before every <b>import</b>, and before every <b>restore</b>; create one by hand before risky changes.
+          <b> Restore</b> rolls back <b>only the {regionName} data</b> (the region selected in the header) to that moment,
+          in place; the other division, users and the activity log are untouched.
         </p>
         <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
           <button className="primary" onClick={create} disabled={busy}>{busy ? 'Working…' : 'Create snapshot now'}</button>
@@ -473,7 +477,7 @@ function BackupsModal({ onClose }) {
                   <td title={s.name}><b>{new Date(s.at).toLocaleString()}</b></td>
                   <td className="muted">{snapshotKind(s.name)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="primary small" onClick={() => restore(s)} disabled={busy}>Restore</button>{' '}
+                    <button className="primary small" onClick={() => restore(s)} disabled={busy}>Restore {regionName}</button>{' '}
                     <button className="ghost small" onClick={() => api.download(`/admin/snapshots/${s.name}/download`, s.name)} title="Download the raw database file (for safekeeping — not meant to be opened)">⬇</button>
                   </td>
                 </tr>

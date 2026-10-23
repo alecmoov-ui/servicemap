@@ -6,6 +6,15 @@ import ExcelJS from 'exceljs'
 import { Readable } from 'node:stream'
 import { miToKm, kmToMi, normalizeCountry, roundMi } from './units.js'
 
+// Country cell: US / USA / United States / CA / Canada (any case) -> 'US' | 'CA';
+// anything else -> 'INVALID' so the importer rejects the row instead of guessing.
+export function parseCountryCell(v) {
+  const t = String(v || '').trim().toLowerCase().replace(/[.\s]/g, '')
+  if (['us', 'usa', 'unitedstates', 'unitedstatesofamerica'].includes(t)) return 'US'
+  if (['ca', 'can', 'canada'].includes(t)) return 'CA'
+  return 'INVALID'
+}
+
 // [ Header label, station field, type ]
 export const FIELD_COLUMNS = [
   ['ID', 'id', 'string'],
@@ -191,7 +200,7 @@ function coerce(type, raw) {
   if (type === 'number') return Number.isNaN(parseFloat(v)) ? null : parseFloat(v)
   if (type === 'int') return Number.isNaN(parseInt(v, 10)) ? null : parseInt(v, 10)
   if (type === 'bool') return truthy(v)
-  if (type === 'country') return normalizeCountry(v)
+  if (type === 'country') return parseCountryCell(v)
   if (type === 'polygon') return textToPolygon(v)
   if (type === 'list') return v.split(',').map((x) => x.trim()).filter(Boolean)
   return v

@@ -55,7 +55,11 @@ change that makes CI red.**
    `allStations`; pages must use the filtered list. Radii are STORED IN MILES everywhere;
    only the edges convert (`src/lib/units.js` on the client, `server/src/units.js` for
    CSV). Geocoding takes the country (`geocode(q, country)` / `geocodeOne(q, country)`).
-   Export/import/template take `?country=`; merge is same-region only.
+   Export/import/template REQUIRE `?country=` (400 otherwise); import skips rows that
+   belong to the other region and never changes a station's country; the client sends
+   `X-Region` and the server refuses (409) writes to a station in the other region
+   (`otherRegion()` in routes/stations.js — add it to any new station write route);
+   restore is per region (`restoreSnapshot(name, country)`); merge is same-region only.
 6. **Adding/editing a station or logging an event must immediately reflect in Map, Zone
    Coverage, and Analytics** — they all read `stations` from `AppContext`, and mutations
    call `loadData()`. Keep that single-source-of-truth flow.

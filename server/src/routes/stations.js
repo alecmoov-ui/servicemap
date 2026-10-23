@@ -8,7 +8,7 @@ import { db, rowToStation, stationToColumns, computePerfMap, rowToServiceEvent, 
 import { requireAuth, requirePermission } from '../auth.js'
 import { logFromReq } from '../activity.js'
 import { computeCompliance } from '../compliance.js'
-import { exportHeader, stationToRow, readRows, rowToPatch } from '../importStations.js'
+import { exportHeader, stationToRow, readRows, rowToPatch, parseCountryCell } from '../importStations.js'
 import { normalizeCountry } from '../units.js'
 import { geocodeOne, sleep } from '../geocode.js'
 import { createSnapshot } from '../snapshot.js'
@@ -23,6 +23,29 @@ mkdirSync(UPLOAD_DIR, { recursive: true })
 const upload = multer({ dest: UPLOAD_DIR, limits: { fileSize: 15 * 1024 * 1024 } }) // 15 MB
 
 const getStation = (id) => db.prepare('SELECT * FROM stations WHERE id = ?').get(id)
+
+// ---- Region isolation (US vs CA) ------------------------------------------
+// Export/import/template MUST name the region (?country=US|CA) — no silent default,
+// so a bookmarked link can't quietly hand one division the other's data.
+function requiredRegion(req, res) {
+  const c = req.query.country
+  if (c !== 'US' && c !== 'CA') {
+    res.status(400).json({ error: 'Specify the region: add ?country=US or ?country=CA (use the Export/Import buttons on the Stations tab).' })
+    return null
+  }
+  return c
+}
+// The client sends the active region as X-Region on every call. Any write to a station
+// that belongs to the OTHER region is refused (409) — a stale tab or a wrong view can't
+// touch the other division's data. Calls without the header (scripts) are unaffected.
+const activeRegion = (req) => (['US', 'CA'].includes(req.headers['x-region']) ? req.headers['x-region'] : null)
+function otherRegion(req, res, row) {
+  const active = activeRegion(req)
+  const own = row?.country || 'US'
+  if (!active || active === own) return false
+  res.status(409).json({ error: `${row.company} belongs to the ${own === 'CA' ? 'Canada' : 'US'} division. Switch the region in the header to change it.` })
+  return true
+}
 
 // Build a station's API object with its derived performance + compliance attached.
 function withDerived(row, perf) {
@@ -66,7 +89,8 @@ const toCsv = (header, rows) =>
 // One region per file (?country=US|CA, default US) so the radius column is in that
 // region's unit and the file round-trips through that region's Import.
 stationsRouter.get('/export.csv', requirePermission('exportData'), (req, res) => {
-  const country = normalizeCountry(req.query.country)
+  const country = requiredRegion(req, res)
+  if (!country) return
   const perf = computePerfMap()
   const rows = db.prepare('SELECT * FROM stations WHERE country = ? ORDER BY company').all(country).map((r) => rowToStation(r, perf[r.id]))
   const stamp = new Date().toISOString().slice(0, 10)
@@ -77,7 +101,8 @@ stationsRouter.get('/export.csv', requirePermission('exportData'), (req, res) =>
 
 // Blank template (headers only) for starting a fresh list.
 stationsRouter.get('/import-template.csv', requirePermission('exportData'), (req, res) => {
-  const country = normalizeCountry(req.query.country)
+  const country = requiredRegion(req, res)
+  if (!country) return
   res.setHeader('Content-Type', 'text/csv')
   res.setHeader('Content-Disposition', `attachment; filename="moov-stations-${country.toLowerCase()}-template.csv"`)
   res.send(toCsv(exportHeader(country), []))
@@ -114,6 +139,8 @@ stationsRouter.get('/imports/:id/download', requirePermission('addStations'), (r
 // company name; blank ID = new). New/blank-coord rows are geocoded best-effort.
 stationsRouter.post('/import', requirePermission('addStations'), upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  const region = requiredRegion(req, res)
+  if (!region) return
 
   let snapshot = null
   try {
@@ -129,22 +156,48 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
     return res.status(400).json({ error: 'Could not read the file: ' + e.message })
   }
 
-  // Region the file was uploaded under: default for new rows without a Country column.
-  const defaultCountry = normalizeCountry(req.query.country)
-  const findByCompany = db.prepare('SELECT * FROM stations WHERE lower(company) = lower(?)')
-  const result = { created: 0, updated: 0, errors: [], warnings: [], snapshot, total: parsed.rows.length }
+  // Region the file was uploaded under. Every row must belong to it: a Country column
+  // naming the other region, or an ID/company matching the other region's station, is
+  // rejected row by row (and the whole file if nothing in it belongs here). Import never
+  // moves a station between regions.
+  const defaultCountry = region
+  const otherName = region === 'CA' ? 'US' : 'Canada'
+  const findByCompany = db.prepare('SELECT * FROM stations WHERE lower(company) = lower(?) AND country = ?')
+  const result = { created: 0, updated: 0, errors: [], warnings: [], snapshot, total: parsed.rows.length, region, otherRegion: 0 }
+  const rowRegion = (row) => (String(row.Country ?? row.country ?? '').trim() ? parseCountryCell(row.Country ?? row.country) : null)
+  const wrongRows = parsed.rows.filter((r) => rowRegion(r) && rowRegion(r) !== region).length
+  if (parsed.rows.length && wrongRows === parsed.rows.length) {
+    return res.status(400).json({ error: `This file contains only ${otherName} stations. Switch the region in the header to ${otherName} and import it there.` })
+  }
   let geocodes = 0
 
   for (let i = 0; i < parsed.rows.length; i++) {
     const rowNum = i + 2 // header is row 1
     try {
       const { patch, products, id, company } = rowToPatch(parsed.rows[i])
+      if (patch.country === 'INVALID') {
+        result.errors.push({ row: rowNum, message: `Country must be US or Canada (got "${parsed.rows[i].Country ?? parsed.rows[i].country}").` })
+        continue
+      }
+      if (patch.country != null && patch.country !== region) { // blank Country cell = "this region"
+        result.errors.push({ row: rowNum, message: `${company || id || 'Row'} is marked ${otherName} — not imported into the ${region === 'CA' ? 'Canada' : 'US'} view.` })
+        result.otherRegion++
+        continue
+      }
+      delete patch.country // region is set on create below and never changed by import
 
-      // Resolve target station.
+      // Resolve target station — only within this region.
       let existing = null
-      if (id) existing = getStation(id)
+      if (id) {
+        existing = getStation(id)
+        if (existing && (existing.country || 'US') !== region) {
+          result.errors.push({ row: rowNum, message: `${existing.company} (${id}) belongs to the ${otherName} division — skipped. Import it from the ${otherName} view.` })
+          result.otherRegion++
+          continue
+        }
+      }
       if (!existing && company) {
-        const matches = findByCompany.all(company)
+        const matches = findByCompany.all(company, region)
         if (matches.length > 1) {
           result.errors.push({ row: rowNum, message: `Ambiguous: ${matches.length} stations named "${company}". Add the ID column to target one.` })
           continue
@@ -160,8 +213,8 @@ stationsRouter.post('/import', requirePermission('addStations'), upload.single('
       const baseProducts = existing ? JSON.parse(existing.products || '{}') : {}
       const mergedProducts = { ...baseProducts, ...products }
       const merged = { ...patch, products: mergedProducts }
-      if (!existing && merged.country === undefined) merged.country = defaultCountry
-      const rowCountry = merged.country ?? existing?.country ?? defaultCountry
+      if (!existing) merged.country = defaultCountry
+      const rowCountry = region
 
       // Geocode if we still lack coordinates and have an address.
       let lat = merged.lat !== undefined ? merged.lat : existing?.lat
@@ -245,7 +298,7 @@ stationsRouter.post('/', requirePermission('addStations'), (req, res) => {
   const s = req.body || {}
   if (!s.company) return res.status(400).json({ error: 'Company is required' })
   const id = 'st_new_' + randomUUID().slice(0, 8)
-  const cols = stationToColumns({ status: 'active', geocodePrecision: 'address', ...s })
+  const cols = stationToColumns({ status: 'active', geocodePrecision: 'address', country: activeRegion(req) || 'US', ...s })
   cols.id = id
   cols.is_master = 0
   const keys = Object.keys(cols)
@@ -257,6 +310,7 @@ stationsRouter.post('/', requirePermission('addStations'), (req, res) => {
 stationsRouter.put('/:id', requirePermission('editStations'), (req, res) => {
   const existing = getStation(req.params.id)
   if (!existing) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, existing)) return
   const cols = stationToColumns(req.body || {})
   const keys = Object.keys(cols)
   if (keys.length) {
@@ -271,6 +325,7 @@ stationsRouter.put('/:id', requirePermission('editStations'), (req, res) => {
 stationsRouter.delete('/:id', requirePermission('deleteStations'), (req, res) => {
   const s = getStation(req.params.id)
   if (!s) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, s)) return
   if (s.is_master) return res.status(403).json({ error: 'Master records cannot be deleted; set status to "paused" instead.' })
   db.prepare('DELETE FROM stations WHERE id = ?').run(req.params.id)
   logFromReq(req, { action: 'station.delete', entityType: 'station', entityId: req.params.id, summary: `Deleted station ${s.company}` })
@@ -284,6 +339,7 @@ stationsRouter.delete('/:id', requirePermission('deleteStations'), (req, res) =>
 stationsRouter.post('/:id/merge', requirePermission('deleteStations'), (req, res) => {
   const target = getStation(req.params.id)
   if (!target) return res.status(404).json({ error: 'Target station not found' })
+  if (otherRegion(req, res, target)) return
   const sourceIds = [...new Set((req.body?.sourceIds || []).map(String))].filter((id) => id !== target.id)
   if (!sourceIds.length) return res.status(400).json({ error: 'Pick at least one other station to merge in' })
   const sources = sourceIds.map((id) => getStation(id))
@@ -349,7 +405,9 @@ stationsRouter.get('/:id/service-events', (req, res) => {
 })
 
 stationsRouter.post('/:id/service-events', requirePermission('logService'), (req, res) => {
-  if (!getStation(req.params.id)) return res.status(404).json({ error: 'Station not found' })
+  const st = getStation(req.params.id)
+  if (!st) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, st)) return
   const b = req.body || {}
   const accepted = b.accepted ? 1 : 0
   const completed = b.completed ? 1 : 0
@@ -371,6 +429,9 @@ stationsRouter.post('/:id/service-events', requirePermission('logService'), (req
 })
 
 stationsRouter.delete('/:id/service-events/:eventId', requirePermission('logService'), (req, res) => {
+  const st = getStation(req.params.id)
+  if (!st) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, st)) return
   db.prepare('DELETE FROM service_events WHERE id = ? AND station_id = ?').run(req.params.eventId, req.params.id)
   logFromReq(req, { action: 'service.delete', entityType: 'station', entityId: req.params.id, summary: `Removed a service-log entry` })
   res.json({ ok: true })
@@ -384,7 +445,9 @@ stationsRouter.get('/:id/documents', (req, res) => {
 })
 
 stationsRouter.post('/:id/documents', requirePermission('editStations'), upload.single('file'), (req, res) => {
-  if (!getStation(req.params.id)) return res.status(404).json({ error: 'Station not found' })
+  const st = getStation(req.params.id)
+  if (!st) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, st)) return
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
   const docType = req.body.docType
   if (!DOC_TYPES.includes(docType)) return res.status(400).json({ error: 'Invalid document type' })
@@ -412,6 +475,9 @@ stationsRouter.get('/:id/documents/:docId/download', (req, res) => {
 })
 
 stationsRouter.delete('/:id/documents/:docId', requirePermission('editStations'), (req, res) => {
+  const st = getStation(req.params.id)
+  if (!st) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, st)) return
   const doc = db.prepare('SELECT * FROM station_documents WHERE id = ? AND station_id = ?').get(req.params.docId, req.params.id)
   if (!doc) return res.status(404).json({ error: 'Document not found' })
   try { unlinkSync(join(UPLOAD_DIR, doc.filename)) } catch {}
