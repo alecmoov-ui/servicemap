@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import StationProfile from '../components/StationProfile.jsx'
+import CopyCard from '../components/CopyCard.jsx'
 import MapView from '../components/MapView.jsx'
 import { useStations, useApp } from '../lib/useStore.js'
 import { fmtDist, fmtRadius, region as regionInfo } from '../lib/units.js'
@@ -171,7 +172,7 @@ export default function MapPage() {
                 onClick={() => setSelectedId(s.id)}
               >
                 <div className="card-head">
-                  <div className="card-title">{s.company}</div>
+                  <div className="card-title">{s.company} <CopyCard station={s} /></div>
                   <div className="score" title="Reliability score">
                     {reliabilityScore(s.perf)}
                   </div>
