@@ -1,13 +1,13 @@
 // Admin data-protection endpoints: create/list/download database snapshots.
-// Snapshots are full SQLite backups; combined with the CSV export and Git, this
-// gives you data rollback points. Restoring is an ops step (see README).
+// Snapshots are full SQLite backups: manual, automatic (daily + before every import
+// and restore) and restorable in place from the Backups dialog.
 
 import { Router } from 'express'
 import { readdirSync, statSync, createReadStream, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { requireAuth, requirePermission } from '../auth.js'
 import { logFromReq } from '../activity.js'
-import { createSnapshot, BACKUP_DIR } from '../snapshot.js'
+import { createSnapshot, restoreSnapshot, BACKUP_DIR } from '../snapshot.js'
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requirePermission('backups'))
@@ -35,4 +35,15 @@ adminRouter.get('/snapshots/:name/download', (req, res) => {
   res.setHeader('Content-Type', 'application/octet-stream')
   res.setHeader('Content-Disposition', `attachment; filename="${safe}"`)
   createReadStream(path).pipe(res)
+})
+
+// Roll station data back to a snapshot (a "prerestore" safety snapshot is taken first).
+adminRouter.post('/snapshots/:name/restore', async (req, res) => {
+  try {
+    const result = await restoreSnapshot(req.params.name)
+    logFromReq(req, { action: 'data.restore', entityType: 'session', summary: `Restored snapshot ${result.restored} (safety copy ${result.safety})` })
+    res.json(result)
+  } catch (e) {
+    res.status(e.message === 'Snapshot not found' ? 404 : 400).json({ error: e.message })
+  }
 })

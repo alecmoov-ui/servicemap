@@ -262,9 +262,12 @@ basemap from OpenStreetMap's public tiles to a commercial provider (see `src/lib
   2. **Database snapshots** (Stations → Backups, admin) — full save-points you can create
      on demand and download. Also run `npm --prefix server run backup` on a weekly cron
      for automatic save-points (keeps the last 14).
-  3. **Restore** is an ops step: stop the server, replace `server/data/servicemap.db`
-     with the chosen snapshot, restart. (Uploaded documents live under `UPLOAD_DIR` and
-     should be on the same persistent disk / backed up together.)
+  3. **Restore** from the same dialog: pick a snapshot → **Restore**. A "prerestore" safety
+     snapshot is taken first, then stations, service areas, service log and document
+     records are rolled back in place (users and the activity log are kept; no restart).
+     Snapshots are also taken **automatically once a day** (last 30 kept,
+     `AUTO_SNAPSHOT_KEEP`) and before every import. Uploaded document files live under
+     `UPLOAD_DIR` on the same persistent disk.
 - **`CLAUDE.md`** — conventions and "don't break these" rules for future changes.
 
 ## What's next (roadmap)

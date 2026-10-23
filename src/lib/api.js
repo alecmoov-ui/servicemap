@@ -98,6 +98,7 @@ export const api = {
 
   // Data protection
   getSnapshots: () => request('/admin/snapshots'),
+  restoreSnapshot: (name) => request(`/admin/snapshots/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
   createSnapshot: () => request('/admin/snapshot', { method: 'POST' }),
 
   geocode: (q, country = 'US') => request('/geocode?q=' + encodeURIComponent(q) + '&country=' + country),
