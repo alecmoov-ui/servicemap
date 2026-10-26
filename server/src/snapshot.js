@@ -20,7 +20,7 @@ export async function createSnapshot(tag = '') {
 
 // Tables that hold station DATA. Users and the activity log are deliberately left
 // alone by a restore (nobody gets locked out; the restore itself stays audited).
-const DATA_TABLES = ['stations', 'service_events', 'station_documents', 'station_imports']
+const DATA_TABLES = ['stations', 'service_events', 'dispatch_requests', 'station_documents', 'station_imports']
 
 // Roll the station data back to a snapshot, in place, without a restart:
 //  1. take a safety snapshot of the current state ("prerestore"),
@@ -51,6 +51,7 @@ export async function restoreSnapshot(name, country = 'ALL') {
       const snapWhere = scoped ? (snapHasCountry ? `WHERE country = '${country}'` : country === 'US' ? '' : 'WHERE 0') : ''
       // 1. remove in-scope live rows (children first)
       db.exec(`DELETE FROM service_events WHERE station_id IN (SELECT id FROM stations ${liveWhere})`)
+      db.exec(`DELETE FROM dispatch_requests WHERE station_id IN (SELECT id FROM stations ${liveWhere})`)
       db.exec(`DELETE FROM station_documents WHERE station_id IN (SELECT id FROM stations ${liveWhere})`)
       db.exec(`DELETE FROM stations ${liveWhere}`)
       if (!scoped) db.exec('DELETE FROM station_imports')
@@ -67,6 +68,7 @@ export async function restoreSnapshot(name, country = 'ALL') {
       copy('stations', snapWhere)
       const childWhere = scoped ? `WHERE station_id IN (SELECT id FROM snap.stations ${snapWhere})` : ''
       copy('service_events', childWhere)
+      copy('dispatch_requests', childWhere)
       copy('station_documents', childWhere)
       if (!scoped) copy('station_imports', '')
     })()

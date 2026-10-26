@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import StationProfile from '../components/StationProfile.jsx'
 import CopyCard from '../components/CopyCard.jsx'
+import RequestOutcome from '../components/RequestOutcome.jsx'
+import { can } from '../lib/roles.js'
 import MapView from '../components/MapView.jsx'
 import { useStations, useApp } from '../lib/useStore.js'
 import { fmtDist, fmtRadius, region as regionInfo } from '../lib/units.js'
 import { api } from '../lib/api.js'
 import { geocode } from '../lib/geocodeClient.js'
 import { coveringPin, pinLabel, stationPins, countLabel } from '../lib/geo.js'
-import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completionRate } from '../lib/ratings.js'
+import { PRODUCTS, reliabilityScore, starRating, stars, acceptanceRate, completionRate, pct } from '../lib/ratings.js'
 
 // Built-in example service locations (coordinates included) so the search flow —
 // ranked list + radius circles — is usable even on a network that blocks the live
@@ -29,8 +31,15 @@ const EXAMPLES = {
 }
 
 export default function MapPage() {
-  const { region } = useApp()
+  const { region, role, requestDispatch } = useApp()
   const allStations = useStations() // active region only
+  // Dispatch requests: confirm dialog, then +1 for the station; the card shows outcome chips.
+  const [requesting, setRequesting] = useState(null) // station
+  const [justRequested, setJustRequested] = useState({}) // stationId -> request
+  const [openReqs, setOpenReqs] = useState([])
+  const [showOpen, setShowOpen] = useState(false)
+  const loadOpen = () => api.getOpenRequests(region).then(setOpenReqs).catch(() => {})
+  useEffect(() => { loadOpen() }, [region]) // eslint-disable-line react-hooks/exhaustive-deps
   const stations = allStations.filter((s) => s.status === 'active')
 
   const [product, setProduct] = useState(PRODUCTS[0].key)
@@ -63,6 +72,17 @@ export default function MapPage() {
       .map(({ s, hit }) => ({ ...s, distanceMi: hit.distanceMi, viaPin: hit.pin }))
       .sort((a, b) => reliabilityScore(b.perf) - reliabilityScore(a.perf) || a.distanceMi - b.distanceMi)
   }, [consumer, product, stations])
+
+  async function confirmRequest(ticket) {
+    const s = requesting
+    const productLabel = PRODUCTS.find((p) => p.key === product)?.label
+    try {
+      const r = await requestDispatch(s.id, { product: productLabel, location: consumer?.address || consumer?.label || null, zendeskTicket: ticket || null })
+      setJustRequested((m) => ({ ...m, [s.id]: r }))
+      setRequesting(null)
+      loadOpen()
+    } catch (e) { alert(e.message) }
+  }
 
   async function onSearch(e) {
     e.preventDefault()
@@ -140,6 +160,27 @@ export default function MapPage() {
           </label>
         </div>
 
+        {openReqs.length > 0 && (
+          <div className="open-reqs">
+            <button className="linkish" onClick={() => setShowOpen((v) => !v)}>
+              {showOpen ? '▾' : '▸'} {openReqs.length} open dispatch request{openReqs.length !== 1 ? 's' : ''} awaiting an outcome
+            </button>
+            {showOpen && (
+              <div className="open-reqs-list">
+                {openReqs.slice(0, 12).map((r) => (
+                  <div key={r.id} className="open-req">
+                    <div>
+                      <b>{r.company}</b> <span className="muted">· {r.product || 'any product'} · {new Date(r.requestedAt + 'Z').toLocaleDateString()}</span>
+                    </div>
+                    <RequestOutcome request={r} stationId={r.stationId} compact onChanged={loadOpen} />
+                  </div>
+                ))}
+                <div className="muted" style={{ fontSize: 11.5 }}>Logging a completed ticket under the station resolves its request automatically.</div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="results">
           {!consumer && (
             <div className="empty">
@@ -189,10 +230,19 @@ export default function MapPage() {
                   </div>
                 )}
                 <div className="card-stats">
-                  <span>Accept {acc != null ? Math.round(acc * 100) + '%' : '—'}</span>
-                  <span>Complete {comp != null ? Math.round(comp * 100) + '%' : '—'}</span>
+                  <span>Req {s.perf?.dispatchRequests || 0}</span>
+                  <span>Accept {pct(acc)}</span>
+                  <span>Done {pct(comp)}</span>
+                  <span>Flags {s.perf?.flags || 0}</span>
                   <span>{s.holdsInventory === 'Yes' ? 'Holds inventory' : 'No inventory'}</span>
                 </div>
+                {justRequested[s.id] && (
+                  <div className="req-row">
+                    <span className="muted">Requested just now.</span>
+                    <RequestOutcome request={justRequested[s.id]} stationId={s.id} compact
+                      onChanged={(r) => { setJustRequested((m) => ({ ...m, [s.id]: r })); loadOpen() }} />
+                  </div>
+                )}
                 {selectedId === s.id && (
                   <div className="card-expand">
                     <div className="kv"><span>Contact</span><b>{s.primaryContact || '—'}{s.primaryContactTitle ? ` (${s.primaryContactTitle})` : ''}</b></div>
@@ -213,9 +263,16 @@ export default function MapPage() {
                     <div className="muted" style={{ marginTop: 8 }}>
                       Use these details to open/route the dispatch in Zendesk.
                     </div>
-                    <button className="ghost small" style={{ marginTop: 8 }} onClick={(e) => { e.stopPropagation(); setProfileId(s.id) }}>
-                      Station profile →
-                    </button>
+                    <div className="card-actions">
+                      {can(role, 'logService') && (
+                        <button className="primary small" onClick={(e) => { e.stopPropagation(); setRequesting(s) }}>
+                          📞 Request dispatch
+                        </button>
+                      )}
+                      <button className="ghost small" onClick={(e) => { e.stopPropagation(); setProfileId(s.id) }}>
+                        Station profile →
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -237,6 +294,16 @@ export default function MapPage() {
         />
       </div>
 
+      {requesting && (
+        <RequestDialog
+          station={requesting}
+          product={PRODUCTS.find((p) => p.key === product)?.label}
+          location={consumer?.address || consumer?.label}
+          onCancel={() => setRequesting(null)}
+          onConfirm={confirmRequest}
+        />
+      )}
+
       {profileStation && (
         <StationProfile
           station={profileStation}
@@ -244,6 +311,34 @@ export default function MapPage() {
           onEdit={() => navigate(`/stations?open=${encodeURIComponent(profileStation.id)}&edit=1`)}
         />
       )}
+    </div>
+  )
+}
+
+// Quick confirmation before a request is counted against the station.
+function RequestDialog({ station, product, location, onCancel, onConfirm }) {
+  const [ticket, setTicket] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Request dispatch</h3>
+        <p className="muted">This adds one dispatch request to the station's record. When the job is done, log the ticket under the station and it counts as accepted and completed.</p>
+        <div className="kv"><span>Station</span><b>{station.company}</b></div>
+        <div className="kv"><span>Phone</span><b>{station.phone || '—'}</b></div>
+        <div className="kv"><span>Product</span><b>{product || '—'}</b></div>
+        <div className="kv"><span>Service address</span><b>{location || '—'}</b></div>
+        <label className="field" style={{ marginTop: 10 }}>
+          <span>Zendesk ticket # (optional)</span>
+          <input value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="e.g. 14872" autoFocus />
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button className="primary" disabled={busy} onClick={async () => { setBusy(true); await onConfirm(ticket.trim()); setBusy(false) }}>
+            {busy ? 'Saving…' : 'Yes, count this request'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

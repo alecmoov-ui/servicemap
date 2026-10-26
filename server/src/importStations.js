@@ -134,7 +134,9 @@ export const PERF_COLUMNS = [
   ['Dispatch Requests', (s) => s.perf?.dispatchRequests],
   ['Dispatch Accepted', (s) => s.perf?.dispatchAccepted],
   ['Jobs Completed', (s) => s.perf?.jobsCompleted],
-  ['Avg Completion Days', (s) => s.perf?.avgCompletionDays],
+  ['Total Job Value', (s) => s.perf?.totalValue],
+  ['Flags', (s) => s.perf?.flags],
+  ['One-Trip Jobs', (s) => s.perf?.oneTrip],
 ]
 
 // Header for one region's export: the radius column is labelled in that region's unit.

@@ -109,6 +109,25 @@ CREATE TABLE IF NOT EXISTS station_documents (
 );
 CREATE INDEX IF NOT EXISTS idx_doc_station ON station_documents (station_id);
 
+-- Dispatch requests: one row each time we ask a station to take a job (Map & Dispatch
+-- "Request dispatch"). Outcome: pending | accepted (they took it) | not_needed (they
+-- accepted but another station got the job) | declined (said no / no response).
+-- Logging a completion auto-links the station's latest open request as accepted.
+CREATE TABLE IF NOT EXISTS dispatch_requests (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  station_id       TEXT NOT NULL REFERENCES stations(id) ON DELETE CASCADE,
+  requested_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  requested_by     TEXT,
+  product          TEXT,
+  location         TEXT,
+  zendesk_ticket   TEXT,
+  outcome          TEXT NOT NULL DEFAULT 'pending',
+  outcome_at       TEXT,
+  service_event_id INTEGER,
+  note             TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_req_station ON dispatch_requests (station_id);
+
 CREATE TABLE IF NOT EXISTS activity_log (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   at          TEXT NOT NULL DEFAULT (datetime('now')),
@@ -172,6 +191,12 @@ ensureColumn('stations', 'country', "TEXT NOT NULL DEFAULT 'US'")
 // Drawn coverage outline for the PRIMARY pin: JSON [[lat,lng],...] (3+ points). When
 // present it replaces the radius circle for matching/drawing. Areas carry `polygon`.
 ensureColumn('stations', 'coverage_polygon', "TEXT NOT NULL DEFAULT '[]'")
+// Service log = completed tickets. Value paid, flag (+ note) for an issue, one-trip job.
+ensureColumn('service_events', 'value', 'REAL')
+ensureColumn('service_events', 'flagged', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('service_events', 'flag_note', 'TEXT')
+ensureColumn('service_events', 'one_trip', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('service_events', 'request_id', 'INTEGER')
 ensureColumn('users', 'country', "TEXT NOT NULL DEFAULT 'US'")
 
 // Split the old single `heatPumps` product flag into electrical + refrigerant.
@@ -197,7 +222,12 @@ export const DOC_TYPES = ['contract', 'hvac_license', 'insurance', 'schedule_a']
 
 // ---- Row <-> API shape ----------------------------------------------------
 
-const ZERO_PERF = { dispatchRequests: 0, dispatchAccepted: 0, jobsCompleted: 0, avgCompletionDays: null }
+// Per-station performance, all DERIVED (see computePerfMap):
+//  dispatchRequests  requests sent to the station      resolvedRequests  requests with an outcome
+//  dispatchAccepted  accepted + not_needed              dispatchSent      accepted (and used)
+//  jobsCompleted     service-log entries                totalValue        sum of job values
+//  flags / oneTrip   flagged / one-trip completions
+export const ZERO_PERF = { dispatchRequests: 0, resolvedRequests: 0, dispatchAccepted: 0, dispatchSent: 0, jobsCompleted: 0, totalValue: 0, flags: 0, oneTrip: 0 }
 
 export function rowToStation(r, perf) {
   if (!r) return null
@@ -306,26 +336,33 @@ export function stationToColumns(s) {
 
 // Aggregate station performance from the service log. Returns a map keyed by id.
 export function computePerfMap() {
-  const rows = db
-    .prepare(
-      `SELECT station_id,
-              COUNT(*) AS requests,
-              SUM(accepted) AS accepted,
-              SUM(completed) AS completed,
-              AVG(CASE WHEN completed = 1 THEN completion_days END) AS avg_days
-       FROM service_events GROUP BY station_id`
-    )
-    .all()
   const map = {}
-  for (const r of rows) {
-    map[r.station_id] = {
-      dispatchRequests: r.requests,
-      dispatchAccepted: r.accepted || 0,
-      jobsCompleted: r.completed || 0,
-      avgCompletionDays: r.avg_days != null ? Math.round(r.avg_days * 10) / 10 : null,
-    }
+  const get = (id) => (map[id] ||= { ...ZERO_PERF })
+  for (const r of db.prepare(
+    `SELECT station_id,
+            COUNT(*) AS requests,
+            SUM(outcome != 'pending') AS resolved,
+            SUM(outcome IN ('accepted', 'not_needed')) AS accepted,
+            SUM(outcome = 'accepted') AS sent
+     FROM dispatch_requests GROUP BY station_id`
+  ).all()) {
+    Object.assign(get(r.station_id), { dispatchRequests: r.requests, resolvedRequests: r.resolved || 0, dispatchAccepted: r.accepted || 0, dispatchSent: r.sent || 0 })
+  }
+  for (const r of db.prepare(
+    `SELECT station_id, COUNT(*) AS completed, COALESCE(SUM(value), 0) AS value, SUM(flagged) AS flags, SUM(one_trip) AS one_trip
+     FROM service_events GROUP BY station_id`
+  ).all()) {
+    Object.assign(get(r.station_id), { jobsCompleted: r.completed, totalValue: Math.round(r.value * 100) / 100, flags: r.flags || 0, oneTrip: r.one_trip || 0 })
   }
   return map
+}
+
+export function rowToRequest(r) {
+  return {
+    id: r.id, stationId: r.station_id, requestedAt: r.requested_at, requestedBy: r.requested_by,
+    product: r.product, location: r.location, zendeskTicket: r.zendesk_ticket,
+    outcome: r.outcome, outcomeAt: r.outcome_at, serviceEventId: r.service_event_id, note: r.note,
+  }
 }
 
 export function rowToServiceEvent(r) {
@@ -335,9 +372,11 @@ export function rowToServiceEvent(r) {
     zendeskTicket: r.zendesk_ticket,
     product: r.product,
     eventDate: r.event_date,
-    accepted: !!r.accepted,
-    completed: !!r.completed,
-    completionDays: r.completion_days,
+    value: r.value,
+    flagged: !!r.flagged,
+    flagNote: r.flag_note,
+    oneTrip: !!r.one_trip,
+    requestId: r.request_id,
     notes: r.notes,
     createdBy: r.created_by,
     createdAt: r.created_at,

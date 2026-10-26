@@ -98,25 +98,63 @@ test('master records cannot be deleted; non-master can (admin/DTM only)', async 
   assert.equal((await api(`/api/stations/${created.data.id}`, { method: 'DELETE', token: dtmToken })).status, 200)
 })
 
-test('service log: dtm can log, view-only roles cannot; performance is recomputed', async () => {
+test('dispatch requests + service log: counts, auto-link, outcomes, value/flag/one-trip; view-only roles cannot', async () => {
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
-  assert.equal((await api('/api/stations/st_02/service-events', { method: 'POST', token: dispatchToken, body: { accepted: true } })).status, 403)
+  assert.equal((await api('/api/stations/st_02/requests', { method: 'POST', token: dispatchToken, body: {} })).status, 403)
+  assert.equal((await api('/api/stations/st_02/service-events', { method: 'POST', token: dispatchToken, body: {} })).status, 403)
 
   const token = await tokenFor('dtm@moovpool.com')
-  const before = (await api('/api/stations', { token })).data.find((s) => s.id === 'st_02').perf
+  // Two requests: one will be completed (auto-accepted), one declined.
+  const r1 = await api('/api/stations/st_02/requests', { method: 'POST', token, body: { product: 'Pump', location: 'Orlando, FL', zendeskTicket: 'Z1' } })
+  assert.equal(r1.status, 201)
+  assert.equal(r1.data.request.outcome, 'pending')
+  assert.equal(r1.data.station.perf.dispatchRequests, 1)
+  const r2 = (await api('/api/stations/st_02/requests', { method: 'POST', token, body: { product: 'Filter' } })).data.request
+  const open = (await api('/api/stations/requests/open?country=US', { token })).data
+  assert.equal(open.filter((r) => r.stationId === 'st_02').length, 2)
+  assert.equal((await api(`/api/stations/st_02/requests/${r2.id}`, { method: 'PUT', token, body: { outcome: 'bogus' } })).status, 400)
+  const declined = await api(`/api/stations/st_02/requests/${r2.id}`, { method: 'PUT', token, body: { outcome: 'declined', note: 'No tech available' } })
+  assert.equal(declined.data.request.outcome, 'declined')
 
-  const updated = await api('/api/stations/st_02/service-events', {
+  // A flag needs a note; value must be numeric.
+  assert.equal((await api('/api/stations/st_02/service-events', { method: 'POST', token, body: { flagged: true } })).status, 400)
+  assert.equal((await api('/api/stations/st_02/service-events', { method: 'POST', token, body: { value: 'abc' } })).status, 400)
+
+  // Logging a completion links the latest open request (r1) as accepted.
+  const done = await api('/api/stations/st_02/service-events', {
     method: 'POST', token,
-    body: { zendeskTicket: 'Z99001', product: 'Pump', accepted: true, completed: true, completionDays: 3, eventDate: '2026-06-01' },
+    body: { zendeskTicket: 'Z1', product: 'Pump', value: 250, oneTrip: true, flagged: true, flagNote: 'Arrived late, customer unhappy', eventDate: '2026-06-01' },
   })
-  assert.equal(updated.status, 201)
-  assert.equal(updated.data.perf.dispatchRequests, before.dispatchRequests + 1)
-  assert.equal(updated.data.perf.dispatchAccepted, before.dispatchAccepted + 1)
-  assert.equal(updated.data.perf.jobsCompleted, before.jobsCompleted + 1)
-  assert.ok(updated.data.perf.avgCompletionDays > 0)
+  assert.equal(done.status, 201)
+  const perf = done.data.perf
+  assert.equal(perf.dispatchRequests, 2)
+  assert.equal(perf.resolvedRequests, 2)
+  assert.equal(perf.dispatchAccepted, 1)
+  assert.equal(perf.dispatchSent, 1)
+  assert.equal(perf.jobsCompleted, 1)
+  assert.equal(perf.totalValue, 250)
+  assert.equal(perf.flags, 1)
+  assert.equal(perf.oneTrip, 1)
+  const reqs = (await api('/api/stations/st_02/requests', { token })).data
+  const linked = reqs.find((r) => r.id === r1.data.request.id)
+  assert.equal(linked.outcome, 'accepted')
+  assert.ok(linked.serviceEventId)
+  const events = (await api('/api/stations/st_02/service-events', { token })).data
+  assert.equal(events[0].requestId, r1.data.request.id)
+  assert.equal(events[0].flagNote, 'Arrived late, customer unhappy')
+  assert.equal(events[0].oneTrip, true)
 
-  const events = await api('/api/stations/st_02/service-events', { token })
-  assert.ok(events.data.some((e) => e.zendeskTicket === 'Z99001'))
+  // "Not needed" counts as accepted but not sent.
+  const r3 = (await api('/api/stations/st_02/requests', { method: 'POST', token, body: {} })).data.request
+  const nn = await api(`/api/stations/st_02/requests/${r3.id}`, { method: 'PUT', token, body: { outcome: 'not_needed' } })
+  assert.equal(nn.data.station.perf.dispatchAccepted, 2)
+  assert.equal(nn.data.station.perf.dispatchSent, 1)
+
+  // Removing the completion unlinks the request (it stays accepted).
+  assert.equal((await api(`/api/stations/st_02/service-events/${events[0].id}`, { method: 'DELETE', token })).status, 200)
+  const after = (await api('/api/stations/st_02/requests', { token })).data.find((r) => r.id === r1.data.request.id)
+  assert.equal(after.serviceEventId, null)
+  assert.equal(after.outcome, 'accepted')
 })
 
 test('CSV export: allowed for admin/dtm, denied for dispatch', async () => {
@@ -196,7 +234,7 @@ test('user creation: permanent password, sales role is view-only, dtm can manage
   assert.equal((await api('/api/stations', { token: salesToken })).status, 200)
   assert.equal((await api('/api/stations', { method: 'POST', token: salesToken, body: { company: 'Nope' } })).status, 403)
   assert.equal((await api('/api/stations/st_01', { method: 'PUT', token: salesToken, body: { company: 'Nope' } })).status, 403)
-  assert.equal((await api('/api/stations/st_01/service-events', { method: 'POST', token: salesToken, body: { accepted: true } })).status, 403)
+  assert.equal((await api('/api/stations/st_01/service-events', { method: 'POST', token: salesToken, body: {} })).status, 403)
   assert.equal((await api('/api/users', { token: salesToken })).status, 403)
   assert.equal((await api('/api/activity', { token: salesToken })).status, 403)
 
@@ -259,7 +297,7 @@ test('activity log: admin/dtm only, records service-log entries', async () => {
   const dtmToken = await tokenFor('dtm@moovpool.com')
   const dispatchToken = await tokenFor('dispatch@moovpool.com')
   assert.equal((await api('/api/activity', { token: dispatchToken })).status, 403)
-  await api('/api/stations/st_03/service-events', { method: 'POST', token: dtmToken, body: { accepted: true, completed: false } })
+  await api('/api/stations/st_03/service-events', { method: 'POST', token: dtmToken, body: { product: 'Pump' } })
   const log = await api('/api/activity', { token: adminToken })
   assert.equal(log.status, 200)
   assert.ok(log.data.some((e) => e.action === 'service.log' && e.actor === 'dtm@moovpool.com'))
@@ -313,8 +351,9 @@ test('merge: folds duplicate records into one station; masters cannot be merged 
   const target = (await mk('Tampa', 27.95, -82.46, { primaryContact: 'Ann', phone: '555-1', email: 'ann@poolcool.test' })).data
   const dupA = (await mk('Orlando', 28.54, -81.38, { primaryContact: 'Bob', phone: '555-2', email: 'bob@poolcool.test', contacts: [{ name: 'Cy', title: 'Tech', phone: '555-3', email: '' }] })).data
   const dupB = (await mk('Miami', 25.77, -80.19, { serviceRadiusMi: 40, primaryContact: 'Ann', phone: '555-1', email: 'ann@poolcool.test' })).data
-  // A service-log entry on a duplicate must move to the survivor.
-  await api(`/api/stations/${dupA.id}/service-events`, { method: 'POST', token, body: { accepted: true, completed: true, completionDays: 2 } })
+  // A service-log entry and a request on a duplicate must move to the survivor.
+  await api(`/api/stations/${dupA.id}/requests`, { method: 'POST', token, body: {} })
+  await api(`/api/stations/${dupA.id}/service-events`, { method: 'POST', token, body: { value: 100 } })
 
   // View-only roles cannot merge; a master cannot be a source.
   const salesToken = await tokenFor('sales@moovpool.com')
@@ -331,8 +370,10 @@ test('merge: folds duplicate records into one station; masters cannot be merged 
   assert.equal(merged.data.serviceAreas.find((a) => a.city === 'Miami').radiusMi, 40)
   // Contacts: Bob + Cy added; Ann (same as target's primary) not duplicated.
   assert.deepEqual(merged.data.contacts.map((c) => c.name).sort(), ['Bob', 'Cy'])
-  // Service log moved → performance is now on the survivor.
+  // Service log + request moved → performance is now on the survivor.
   assert.equal(merged.data.perf.jobsCompleted, 1)
+  assert.equal(merged.data.perf.dispatchRequests, 1)
+  assert.equal(merged.data.perf.totalValue, 100)
   // Duplicates are gone.
   const all = (await api('/api/stations', { token })).data
   assert.ok(!all.some((s) => s.id === dupA.id || s.id === dupB.id))
@@ -443,7 +484,7 @@ test('backups: restore rolls station data back to a snapshot (safety snapshot fi
 
   // Damage: rename a station, add a service-log entry, create a station.
   await api('/api/stations/st_02', { method: 'PUT', token, body: { company: 'WRONG NAME', phone: '000' } })
-  await api('/api/stations/st_02/service-events', { method: 'POST', token, body: { accepted: true, completed: true, completionDays: 1 } })
+  await api('/api/stations/st_02/service-events', { method: 'POST', token, body: { value: 80 } })
   const extra = (await api('/api/stations', { method: 'POST', token, body: { company: 'Should Vanish', city: 'X', state: 'TX', lat: 30, lng: -97, products: {} } })).data
   const sales = await tokenFor('sales@moovpool.com')
   assert.equal((await api(`/api/admin/snapshots/${snap.data.name}/restore?country=ALL`, { method: 'POST', token: sales })).status, 403)
@@ -519,7 +560,8 @@ test('region isolation: export/import/restore are per division; writes from the 
   assert.equal((await apiR('/api/stations/st_03', { method: 'PUT', body: { phone: '1' } }, 'CA')).status, 409)
   assert.equal((await apiR(`/api/stations/${ca.id}`, { method: 'PUT', body: { phone: '1' } }, 'US')).status, 409)
   assert.equal((await apiR(`/api/stations/${ca.id}`, { method: 'DELETE' }, 'US')).status, 409)
-  assert.equal((await apiR('/api/stations/st_03/service-events', { method: 'POST', body: { accepted: true } }, 'CA')).status, 409)
+  assert.equal((await apiR('/api/stations/st_03/service-events', { method: 'POST', body: {} }, 'CA')).status, 409)
+  assert.equal((await apiR('/api/stations/st_03/requests', { method: 'POST', body: {} }, 'CA')).status, 409)
   assert.equal((await apiR(`/api/stations/${ca.id}/merge`, { method: 'POST', body: { sourceIds: ['st_03'] } }, 'US')).status, 409)
   assert.equal((await apiR(`/api/stations/${ca.id}`, { method: 'PUT', body: { phone: '1' } }, 'CA')).status, 200)
   const created = await apiR('/api/stations', { method: 'POST', body: { company: 'Header Region Co', city: 'Kelowna', state: 'BC', lat: 49.9, lng: -119.5, products: {} } }, 'CA')

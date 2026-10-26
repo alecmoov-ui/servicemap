@@ -16,25 +16,42 @@ export function productLabel(key) {
   return PRODUCTS.find((p) => p.key === key)?.label ?? key
 }
 
+// Rates derived from perf (see server db.js ZERO_PERF). null = no data yet.
+// Acceptance: of requests with an outcome, how many were accepted (incl. "not needed").
 export function acceptanceRate(perf) {
-  if (!perf || !perf.dispatchRequests) return null
-  return perf.dispatchAccepted / perf.dispatchRequests
+  if (!perf || !perf.resolvedRequests) return null
+  return perf.dispatchAccepted / perf.resolvedRequests
 }
-
+// Completion: of requests the station accepted AND was sent on, how many were logged done.
+// "Not needed" (another station got the job) is excluded, so nobody is penalised for it.
 export function completionRate(perf) {
-  if (!perf || !perf.dispatchAccepted) return null
-  return perf.jobsCompleted / perf.dispatchAccepted
+  if (!perf || !perf.dispatchSent) return null
+  return Math.min(1, perf.jobsCompleted / perf.dispatchSent)
+}
+export function flagRate(perf) {
+  if (!perf || !perf.jobsCompleted) return null
+  return perf.flags / perf.jobsCompleted
+}
+export function oneTripRate(perf) {
+  if (!perf || !perf.jobsCompleted) return null
+  return perf.oneTrip / perf.jobsCompleted
+}
+export function avgJobValue(perf) {
+  if (!perf || !perf.jobsCompleted || !perf.totalValue) return null
+  return perf.totalValue / perf.jobsCompleted
 }
 
-// Composite 0–100 reliability score, derived purely from the Service Log. A station
-// with no logged tickets scores 0 — scores are earned, not assumed. With equal
-// scores the dispatch list falls back to distance.
+// Composite 0–100 reliability score, derived purely from requests + the service log:
+// completion 35 · acceptance 20 · one-trip 20 · (1 − flag rate) 15 · volume up to 10.
+// No history at all = 0 — scores are earned, not assumed. Ties rank by distance.
 export function reliabilityScore(perf) {
-  const acc = acceptanceRate(perf)
-  const comp = completionRate(perf)
-  if (acc == null) return 0 // no history yet
-  const volumeBoost = Math.min((perf.dispatchRequests || 0) / 20, 1) * 10
-  return Math.round(acc * 55 + (comp ?? 0.8) * 35 + volumeBoost)
+  if (!perf || (!perf.resolvedRequests && !perf.jobsCompleted)) return 0
+  const acc = acceptanceRate(perf) ?? 0
+  const comp = completionRate(perf) ?? 0
+  const trip = oneTripRate(perf) ?? 0
+  const clean = 1 - (flagRate(perf) ?? 0)
+  const volume = Math.min((perf.jobsCompleted || 0) / 20, 1)
+  return Math.round(comp * 35 + acc * 20 + trip * 20 + clean * 15 + volume * 10)
 }
 
 // 0–5 star rating derived from the composite score.
@@ -47,3 +64,5 @@ export function stars(rating) {
   const half = rating - full >= 0.5
   return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(5 - full - (half ? 1 : 0))
 }
+
+export const pct = (r) => (r == null ? '—' : Math.round(r * 100) + '%')
