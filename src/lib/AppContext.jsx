@@ -95,6 +95,16 @@ export function AppProvider({ children }) {
     await api.logServiceEvent(id, e)
     await loadData()
   }
+  const requestDispatch = async (id, body) => {
+    const r = await api.createRequest(id, body)
+    await loadData()
+    return r.request
+  }
+  const setRequestOutcome = async (id, rid, outcome, note) => {
+    const r = await api.setRequestOutcome(id, rid, outcome, note)
+    await loadData()
+    return r.request
+  }
 
   const value = {
     user,
@@ -113,6 +123,8 @@ export function AppProvider({ children }) {
     createStation,
     updateStation,
     logServiceEvent,
+    requestDispatch,
+    setRequestOutcome,
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

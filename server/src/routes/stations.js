@@ -4,7 +4,7 @@ import { mkdirSync, createReadStream, unlinkSync, existsSync, readFileSync } fro
 import { fileURLToPath } from 'node:url'
 import { dirname, join, extname } from 'node:path'
 import multer from 'multer'
-import { db, rowToStation, stationToColumns, computePerfMap, rowToServiceEvent, rowToDocument, DOC_TYPES } from '../db.js'
+import { db, rowToStation, stationToColumns, computePerfMap, rowToServiceEvent, rowToRequest, rowToDocument, DOC_TYPES } from '../db.js'
 import { requireAuth, requirePermission } from '../auth.js'
 import { logFromReq } from '../activity.js'
 import { computeCompliance } from '../compliance.js'
@@ -74,6 +74,63 @@ stationsRouter.get('/', (req, res) => {
       return station
     })
   )
+})
+
+// ---- Dispatch requests ----------------------------------------------------
+
+const OUTCOMES = ['pending', 'accepted', 'not_needed', 'declined']
+const requestRow = (id) => db.prepare('SELECT * FROM dispatch_requests WHERE id = ?').get(id)
+
+// Open (pending) requests for one region — the Map sidebar's housekeeping list.
+stationsRouter.get('/requests/open', (req, res) => {
+  const country = req.query.country === 'CA' ? 'CA' : 'US'
+  const rows = db.prepare(
+    `SELECT r.*, s.company, s.city, s.state FROM dispatch_requests r JOIN stations s ON s.id = r.station_id
+     WHERE r.outcome = 'pending' AND s.country = ? ORDER BY r.requested_at DESC LIMIT 50`
+  ).all(country)
+  res.json(rows.map((r) => ({ ...rowToRequest(r), company: r.company, city: r.city, state: r.state })))
+})
+
+stationsRouter.get('/:id/requests', (req, res) => {
+  const rows = db.prepare('SELECT * FROM dispatch_requests WHERE station_id = ? ORDER BY requested_at DESC, id DESC').all(req.params.id)
+  res.json(rows.map(rowToRequest))
+})
+
+// "Request dispatch" from Map & Dispatch: +1 request for the station.
+stationsRouter.post('/:id/requests', requirePermission('logService'), (req, res) => {
+  const st = getStation(req.params.id)
+  if (!st) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, st)) return
+  const b = req.body || {}
+  const info = db.prepare(
+    'INSERT INTO dispatch_requests (station_id, requested_by, product, location, zendesk_ticket) VALUES (?, ?, ?, ?, ?)'
+  ).run(st.id, req.user.email, b.product || null, b.location || null, b.zendeskTicket || null)
+  logFromReq(req, { action: 'dispatch.request', entityType: 'station', entityId: st.id, summary: `Requested dispatch from ${st.company}${b.product ? ' (' + b.product + ')' : ''}${b.zendeskTicket ? ' · Zendesk ' + b.zendeskTicket : ''}` })
+  res.status(201).json({ request: rowToRequest(requestRow(info.lastInsertRowid)), station: withDerived(getStation(st.id), computePerfMap()[st.id]) })
+})
+
+// Set the outcome: accepted | not_needed | declined (or back to pending).
+stationsRouter.put('/:id/requests/:rid', requirePermission('logService'), (req, res) => {
+  const st = getStation(req.params.id)
+  if (!st) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, st)) return
+  const r = requestRow(req.params.rid)
+  if (!r || r.station_id !== st.id) return res.status(404).json({ error: 'Request not found' })
+  const { outcome, note } = req.body || {}
+  if (!OUTCOMES.includes(outcome)) return res.status(400).json({ error: 'Outcome must be pending, accepted, not_needed or declined' })
+  db.prepare("UPDATE dispatch_requests SET outcome = ?, outcome_at = CASE WHEN ? = 'pending' THEN NULL ELSE datetime('now') END, note = COALESCE(?, note) WHERE id = ?")
+    .run(outcome, outcome, note ?? null, r.id)
+  logFromReq(req, { action: 'dispatch.outcome', entityType: 'station', entityId: st.id, summary: `${st.company}: request marked ${outcome.replace('_', ' ')}` })
+  res.json({ request: rowToRequest(requestRow(r.id)), station: withDerived(getStation(st.id), computePerfMap()[st.id]) })
+})
+
+stationsRouter.delete('/:id/requests/:rid', requirePermission('logService'), (req, res) => {
+  const st = getStation(req.params.id)
+  if (!st) return res.status(404).json({ error: 'Station not found' })
+  if (otherRegion(req, res, st)) return
+  db.prepare('DELETE FROM dispatch_requests WHERE id = ? AND station_id = ?').run(req.params.rid, st.id)
+  logFromReq(req, { action: 'dispatch.delete', entityType: 'station', entityId: st.id, summary: `Removed a dispatch request for ${st.company}` })
+  res.json({ ok: true })
 })
 
 const csvEsc = (v) => {
@@ -381,10 +438,12 @@ stationsRouter.post('/:id/merge', requirePermission('deleteStations'), (req, res
     db.prepare("UPDATE stations SET service_areas = @service_areas, contacts = @contacts, updated_at = datetime('now') WHERE id = @id")
       .run({ id: target.id, ...cols })
     const moveEvents = db.prepare('UPDATE service_events SET station_id = ? WHERE station_id = ?')
+    const moveRequests = db.prepare('UPDATE dispatch_requests SET station_id = ? WHERE station_id = ?')
     const moveDocs = db.prepare('UPDATE station_documents SET station_id = ? WHERE station_id = ?')
     const del = db.prepare('DELETE FROM stations WHERE id = ? AND is_master = 0')
     for (const id of sourceIds) {
       moveEvents.run(target.id, id)
+      moveRequests.run(target.id, id)
       moveDocs.run(target.id, id)
       del.run(id)
     }
@@ -409,21 +468,31 @@ stationsRouter.post('/:id/service-events', requirePermission('logService'), (req
   if (!st) return res.status(404).json({ error: 'Station not found' })
   if (otherRegion(req, res, st)) return
   const b = req.body || {}
-  const accepted = b.accepted ? 1 : 0
-  const completed = b.completed ? 1 : 0
-  db.prepare(
-    `INSERT INTO service_events (station_id, zendesk_ticket, product, event_date, accepted, completed, completion_days, notes, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  const flagged = b.flagged ? 1 : 0
+  if (flagged && !String(b.flagNote || '').trim()) return res.status(400).json({ error: 'Add a short note describing the flag' })
+  const value = b.value === '' || b.value == null ? null : Number(b.value)
+  if (value != null && (!Number.isFinite(value) || value < 0)) return res.status(400).json({ error: 'Job value must be a number' })
+  // A logged ticket = accepted + completed. Link it to the station's latest open request
+  // (pending or accepted-but-unlinked), marking that request accepted.
+  const open = db.prepare(
+    `SELECT id FROM dispatch_requests WHERE station_id = ? AND service_event_id IS NULL AND outcome IN ('pending', 'accepted')
+     ORDER BY requested_at DESC, id DESC LIMIT 1`
+  ).get(req.params.id)
+  const info = db.prepare(
+    `INSERT INTO service_events (station_id, zendesk_ticket, product, event_date, accepted, completed, value, flagged, flag_note, one_trip, request_id, notes, created_by)
+     VALUES (?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     req.params.id, b.zendeskTicket || null, b.product || null,
     b.eventDate || new Date().toISOString().slice(0, 10),
-    accepted, completed,
-    completed && b.completionDays != null ? Number(b.completionDays) : null,
+    value, flagged, flagged ? String(b.flagNote).trim() : null, b.oneTrip ? 1 : 0, open?.id ?? null,
     b.notes || null, req.user.email
   )
+  if (open) {
+    db.prepare("UPDATE dispatch_requests SET outcome = 'accepted', outcome_at = COALESCE(outcome_at, datetime('now')), service_event_id = ? WHERE id = ?").run(info.lastInsertRowid, open.id)
+  }
   logFromReq(req, {
     action: 'service.log', entityType: 'station', entityId: req.params.id,
-    summary: `Logged service event${b.zendeskTicket ? ' (Zendesk ' + b.zendeskTicket + ')' : ''}: ${accepted ? 'accepted' : 'declined'}${completed ? ', completed' : ''}`,
+    summary: `Logged completed ticket${b.zendeskTicket ? ' (Zendesk ' + b.zendeskTicket + ')' : ''}${value != null ? ' · $' + value : ''}${flagged ? ' · FLAG: ' + String(b.flagNote).trim().slice(0, 80) : ''}${b.oneTrip ? ' · one trip' : ''}`,
   })
   res.status(201).json(withDerived(getStation(req.params.id), computePerfMap()[req.params.id]))
 })
@@ -432,6 +501,7 @@ stationsRouter.delete('/:id/service-events/:eventId', requirePermission('logServ
   const st = getStation(req.params.id)
   if (!st) return res.status(404).json({ error: 'Station not found' })
   if (otherRegion(req, res, st)) return
+  db.prepare('UPDATE dispatch_requests SET service_event_id = NULL WHERE service_event_id = ?').run(req.params.eventId)
   db.prepare('DELETE FROM service_events WHERE id = ? AND station_id = ?').run(req.params.eventId, req.params.id)
   logFromReq(req, { action: 'service.delete', entityType: 'station', entityId: req.params.id, summary: `Removed a service-log entry` })
   res.json({ ok: true })

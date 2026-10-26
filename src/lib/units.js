@@ -20,3 +20,9 @@ export const toMiles = (value, key) => {
   if (Number.isNaN(n)) return ''
   return Math.round((key === 'CA' ? kmToMi(n) : n) * 10) / 10
 }
+
+// Money in the region's currency (no conversion — each division enters its own).
+export const fmtMoney = (v, key, opts = {}) => {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  return new Intl.NumberFormat(key === 'CA' ? 'en-CA' : 'en-US', { style: 'currency', currency: key === 'CA' ? 'CAD' : 'USD', maximumFractionDigits: opts.cents ? 2 : 0 }).format(Number(v))
+}

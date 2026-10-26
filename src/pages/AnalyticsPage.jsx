@@ -1,33 +1,34 @@
 import { useMemo } from 'react'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  FunnelChart, Funnel, LabelList, Cell,
-} from 'recharts'
-import { useStations } from '../lib/useStore.js'
-import { reliabilityScore, acceptanceRate, completionRate, PRODUCTS } from '../lib/ratings.js'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { useStations, useApp } from '../lib/useStore.js'
+import { fmtMoney } from '../lib/units.js'
+import { reliabilityScore, acceptanceRate, completionRate, flagRate, oneTripRate, avgJobValue, PRODUCTS, pct } from '../lib/ratings.js'
 import { complianceClass, complianceLabel, issueText } from '../lib/compliance.js'
 import { locationCount } from '../lib/geo.js'
 
 export default function AnalyticsPage() {
   const stations = useStations()
+  const { region } = useApp()
 
-  // Network-wide funnel from the service log (aggregated station performance).
+  // Network-wide totals from dispatch requests + the service log (per-station perf summed).
   const totals = useMemo(() => {
-    return stations.reduce(
-      (a, s) => ({
-        req: a.req + (s.perf?.dispatchRequests || 0),
-        acc: a.acc + (s.perf?.dispatchAccepted || 0),
-        comp: a.comp + (s.perf?.jobsCompleted || 0),
-      }),
-      { req: 0, acc: 0, comp: 0 }
-    )
+    const t = { req: 0, resolved: 0, acc: 0, sent: 0, comp: 0, value: 0, flags: 0, oneTrip: 0 }
+    for (const s of stations) {
+      const p = s.perf || {}
+      t.req += p.dispatchRequests || 0; t.resolved += p.resolvedRequests || 0; t.acc += p.dispatchAccepted || 0
+      t.sent += p.dispatchSent || 0; t.comp += p.jobsCompleted || 0; t.value += p.totalValue || 0
+      t.flags += p.flags || 0; t.oneTrip += p.oneTrip || 0
+    }
+    return t
   }, [stations])
 
-  const funnel = [
-    { name: 'Requested', value: totals.req, fill: '#2d6cdf' },
-    { name: 'Accepted', value: totals.acc, fill: '#1f9d55' },
-    { name: 'Completed', value: totals.comp, fill: '#e0701a' },
-  ]
+  // Per-station performance table: anyone with a request or a logged ticket, best first.
+  const perfRows = useMemo(
+    () => stations
+      .filter((s) => (s.perf?.dispatchRequests || 0) + (s.perf?.jobsCompleted || 0) > 0)
+      .sort((a, b) => reliabilityScore(b.perf) - reliabilityScore(a.perf) || (b.perf?.jobsCompleted || 0) - (a.perf?.jobsCompleted || 0)),
+    [stations]
+  )
 
   // Coverage / capacity by state.
   const byState = useMemo(() => {
@@ -49,20 +50,6 @@ export default function AnalyticsPage() {
     [stations]
   )
 
-  const leaderboard = useMemo(
-    () =>
-      [...stations]
-        .sort((a, b) => reliabilityScore(b.perf) - reliabilityScore(a.perf))
-        .slice(0, 10),
-    [stations]
-  )
-
-  // Avg completion duration (days), averaged across stations that have data.
-  const avgResolution = useMemo(() => {
-    const vals = stations.map((s) => s.perf?.avgCompletionDays).filter((v) => v != null)
-    if (!vals.length) return null
-    return vals.reduce((a, b) => a + b, 0) / vals.length
-  }, [stations])
 
   // Stations needing compliance attention (expired first, then warnings).
   const flagged = useMemo(() => {
@@ -72,8 +59,10 @@ export default function AnalyticsPage() {
       .sort((a, b) => rank[a.compliance.level] - rank[b.compliance.level])
   }, [stations])
 
-  const acc = totals.req ? Math.round((totals.acc / totals.req) * 100) : 0
-  const comp = totals.acc ? Math.round((totals.comp / totals.acc) * 100) : 0
+  const acc = totals.resolved ? Math.round((totals.acc / totals.resolved) * 100) + '%' : '—'
+  const comp = totals.sent ? Math.round((Math.min(totals.comp, totals.sent) / totals.sent) * 100) + '%' : '—'
+  const flagPct = totals.comp ? Math.round((totals.flags / totals.comp) * 100) + '%' : '—'
+  const avgValue = totals.comp && totals.value ? totals.value / totals.comp : null
 
   return (
     <div className="analytics">
@@ -83,28 +72,13 @@ export default function AnalyticsPage() {
           value={<>{locationCount(stations.filter((s) => s.status === 'active'))} <small>({stations.filter((s) => s.status === 'active').length})</small></>}
         />
         <Kpi label="Dispatch requests" value={totals.req} />
-        <Kpi label="Acceptance rate" value={acc + '%'} />
-        <Kpi label="Completion rate" value={comp + '%'} />
-        <Kpi label="Avg completion" value={avgResolution != null ? avgResolution.toFixed(1) + ' days' : '—'} />
-        <Kpi label="Compliance flags" value={flagged.length} />
+        <Kpi label="Acceptance rate" value={acc} />
+        <Kpi label="Completion rate" value={comp} />
+        <Kpi label="Flags" value={<>{totals.flags} <small>({flagPct})</small></>} />
+        <Kpi label="Value of jobs" value={<>{fmtMoney(totals.value, region)} <small>avg {fmtMoney(avgValue, region)}</small></>} />
       </div>
 
       <div className="charts">
-        <Panel title="Dispatch funnel (requested → accepted → completed)">
-          <ResponsiveContainer width="100%" height={240}>
-            <FunnelChart>
-              <Tooltip />
-              <Funnel dataKey="value" data={funnel} isAnimationActive>
-                <LabelList position="right" fill="#222" stroke="none" dataKey="name" />
-                <LabelList position="left" fill="#222" stroke="none" dataKey="value" />
-                {funnel.map((e, i) => (
-                  <Cell key={i} fill={e.fill} />
-                ))}
-              </Funnel>
-            </FunnelChart>
-          </ResponsiveContainer>
-        </Panel>
-
         <Panel title="Stations by state (capacity & gaps)">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={byState}>
@@ -129,23 +103,41 @@ export default function AnalyticsPage() {
           </ResponsiveContainer>
         </Panel>
 
-        <Panel title="Reliability leaderboard">
-          <table className="table">
-            <thead>
-              <tr><th>Station</th><th>ST</th><th>Score</th><th>Accept</th><th>Complete</th></tr>
-            </thead>
-            <tbody>
-              {leaderboard.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.company}</td>
-                  <td>{s.state}</td>
-                  <td><b>{reliabilityScore(s.perf)}</b></td>
-                  <td>{acceptanceRate(s.perf) != null ? Math.round(acceptanceRate(s.perf) * 100) + '%' : '—'}</td>
-                  <td>{completionRate(s.perf) != null ? Math.round(completionRate(s.perf) * 100) + '%' : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Panel title={`Station performance (${perfRows.length} with activity)`}>
+          {perfRows.length === 0 ? (
+            <div className="empty">No activity yet. Press <b>Request dispatch</b> on a Map result and log completed tickets under Stations → Log.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="table small perf-table">
+                <thead>
+                  <tr>
+                    <th>Station</th><th>ST</th><th className="num">Score</th><th className="num">Req</th><th className="num">Accept</th>
+                    <th className="num">Done</th><th className="num">Done %</th><th className="num">Value</th><th className="num">Avg/job</th>
+                    <th className="num">Flags</th><th className="num">Flag %</th><th className="num">1-trip</th><th className="num">1-trip %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perfRows.map((s) => (
+                    <tr key={s.id}>
+                      <td>{s.company}</td>
+                      <td>{s.state}</td>
+                      <td className="num"><b>{reliabilityScore(s.perf)}</b></td>
+                      <td className="num">{s.perf.dispatchRequests}</td>
+                      <td className="num">{pct(acceptanceRate(s.perf))}</td>
+                      <td className="num">{s.perf.jobsCompleted}</td>
+                      <td className="num">{pct(completionRate(s.perf))}</td>
+                      <td className="num">{fmtMoney(s.perf.totalValue, region)}</td>
+                      <td className="num">{fmtMoney(avgJobValue(s.perf), region)}</td>
+                      <td className="num">{s.perf.flags}</td>
+                      <td className="num">{pct(flagRate(s.perf))}</td>
+                      <td className="num">{s.perf.oneTrip}</td>
+                      <td className="num">{pct(oneTripRate(s.perf))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Panel>
 
         <Panel title={`Compliance & expirations (${flagged.length})`}>

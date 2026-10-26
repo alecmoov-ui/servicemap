@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../lib/AppContext.jsx'
 import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
-import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate, productLabel } from '../lib/ratings.js'
+import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate, flagRate, oneTripRate, avgJobValue, productLabel, pct } from '../lib/ratings.js'
 import { complianceLabel, complianceClass, issueText } from '../lib/compliance.js'
 import { stationPins, pinLabel } from '../lib/geo.js'
-import { fmtRadius, region as regionInfo } from '../lib/units.js'
+import { fmtRadius, region as regionInfo, fmtMoney } from '../lib/units.js'
+import RequestOutcome from './RequestOutcome.jsx'
 import LocatePreview from './LocatePreview.jsx'
 import CopyCard from './CopyCard.jsx'
 import { formatAddress } from '../lib/format.js'
@@ -30,10 +31,14 @@ export default function StationProfile({ station: s, onClose, onEdit }) {
   const { role } = useApp()
   const [docs, setDocs] = useState([])
   const [events, setEvents] = useState([])
+  const [requests, setRequests] = useState([])
+  const loadRequests = () => api.getRequests(s.id).then(setRequests).catch(() => {})
   useEffect(() => {
     api.getDocuments(s.id).then(setDocs).catch(() => {})
     api.getServiceEvents(s.id).then(setEvents).catch(() => {})
-  }, [s.id])
+    loadRequests()
+  }, [s.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const flags = events.filter((e) => e.flagged)
   const info = regionInfo(s.country)
   const acc = acceptanceRate(s.perf)
   const comp = completionRate(s.perf)
@@ -119,21 +124,57 @@ export default function StationProfile({ station: s, onClose, onEdit }) {
           </section>
         </div>
 
-        <div className="label-row">Performance <span className="muted">(derived from the service log)</span></div>
-        <div className="card-stats">
-          <span>Score {reliabilityScore(s.perf)}</span>
-          <span>Requests {s.perf?.dispatchRequests ?? 0}</span>
-          <span>Accept {acc != null ? Math.round(acc * 100) + '%' : '—'}</span>
-          <span>Complete {comp != null ? Math.round(comp * 100) + '%' : '—'}</span>
-          <span>Avg days {s.perf?.avgCompletionDays ?? '—'}</span>
+        <div className="label-row">Performance <span className="muted">(derived from dispatch requests + the service log)</span></div>
+        <div className="perf-grid">
+          <div className="perf-cell"><b>{s.perf?.dispatchRequests ?? 0}</b><span>Requests</span></div>
+          <div className="perf-cell"><b>{pct(acc)}</b><span>Acceptance</span></div>
+          <div className="perf-cell"><b>{s.perf?.jobsCompleted ?? 0}</b><span>Completed</span></div>
+          <div className="perf-cell"><b>{pct(comp)}</b><span>Completion</span></div>
+          <div className="perf-cell"><b>{fmtMoney(s.perf?.totalValue, s.country)}</b><span>Job value</span></div>
+          <div className="perf-cell"><b>{fmtMoney(avgJobValue(s.perf), s.country)}</b><span>Avg per job</span></div>
+          <div className="perf-cell"><b>{s.perf?.flags ?? 0} <small>({pct(flagRate(s.perf))})</small></b><span>Flags</span></div>
+          <div className="perf-cell"><b>{s.perf?.oneTrip ?? 0} <small>({pct(oneTripRate(s.perf))})</small></b><span>One trip</span></div>
         </div>
-        {events.length > 0 && (
-          <div className="table-wrap" style={{ marginTop: 8 }}>
+
+        <div className="label-row">Flags <span className="muted">({flags.length})</span></div>
+        {flags.length === 0 && <div className="muted">No flagged tickets.</div>}
+        {flags.map((e) => (
+          <div key={e.id} className="flag-note">
+            <b>{e.eventDate}</b>{e.zendeskTicket ? ` · Zendesk ${e.zendeskTicket}` : ''}{e.product ? ` · ${e.product}` : ''} — {e.flagNote}
+          </div>
+        ))}
+
+        <div className="label-row">Dispatch requests <span className="muted">({requests.length})</span></div>
+        {requests.length === 0 && <div className="muted">No dispatch requests yet — use <b>Request dispatch</b> on a Map result card.</div>}
+        {requests.length > 0 && (
+          <div className="table-wrap">
             <table className="table small">
-              <thead><tr><th>Date</th><th>Ticket</th><th>Product</th><th>Accepted</th><th>Completed</th><th>Days</th></tr></thead>
+              <thead><tr><th>Requested</th><th>Product</th><th>Service address</th><th>Ticket</th><th>Outcome</th></tr></thead>
+              <tbody>
+                {requests.slice(0, 10).map((r) => (
+                  <tr key={r.id}>
+                    <td>{new Date(r.requestedAt + 'Z').toLocaleDateString()}</td>
+                    <td>{r.product || '—'}</td>
+                    <td>{r.location || '—'}</td>
+                    <td>{r.zendeskTicket || '—'}</td>
+                    <td><RequestOutcome request={r} stationId={s.id} compact onChanged={loadRequests} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {requests.length > 10 && <div className="muted">Showing the 10 most recent of {requests.length}.</div>}
+          </div>
+        )}
+
+        <div className="label-row">Logged tickets <span className="muted">({events.length})</span></div>
+        {events.length === 0 && <div className="muted">No tickets logged yet.</div>}
+        {events.length > 0 && (
+          <div className="table-wrap">
+            <table className="table small">
+              <thead><tr><th>Date</th><th>Ticket</th><th>Product</th><th className="num">Value</th><th>One trip</th><th>Flag</th></tr></thead>
               <tbody>
                 {events.slice(0, 8).map((e) => (
-                  <tr key={e.id}><td>{e.eventDate || '—'}</td><td>{e.zendeskTicket || '—'}</td><td>{e.product || '—'}</td><td>{yn(e.accepted)}</td><td>{yn(e.completed)}</td><td>{e.completionDays ?? '—'}</td></tr>
+                  <tr key={e.id}><td>{e.eventDate || '—'}</td><td>{e.zendeskTicket || '—'}</td><td>{e.product || '—'}</td><td className="num">{e.value != null ? fmtMoney(e.value, s.country, { cents: true }) : '—'}</td><td>{yn(e.oneTrip)}</td><td>{e.flagged ? '⚑' : '—'}</td></tr>
                 ))}
               </tbody>
             </table>

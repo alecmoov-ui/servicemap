@@ -279,3 +279,22 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 1
 .card-title .copy-btn, .leaflet-popup-content .copy-btn { opacity: 0.75; }
 .card-title .copy-btn:hover, .leaflet-popup-content .copy-btn:hover { opacity: 1; }
 .profile-head h3 .copy-btn { font-size: 12px; font-weight: 500; margin-left: 8px; padding: 3px 8px; border-color: var(--line); background: var(--bg); }
+
+/* Dispatch requests */
+.card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.req-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
+.req-chips { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.req-chips .chip-mini.ok { border-color: var(--green); color: var(--green); }
+.req-chips .chip-mini.bad { border-color: #c0392b; color: #c0392b; }
+.req-outcome { display: inline-flex; gap: 6px; align-items: center; }
+.req-outcome .linkish { font-size: 11px; }
+.open-reqs { padding: 8px 14px; border-bottom: 1px solid var(--line); background: #fffaf0; font-size: 12.5px; }
+.open-reqs > .linkish { font-weight: 600; color: #8a5a00; text-decoration: none; }
+.open-reqs-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.open-req { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.flag-note { font-size: 12px; color: #8a3b00; background: #fff4e5; border-left: 3px solid #e0701a; padding: 6px 8px; border-radius: 6px; margin: 4px 0; }
+.perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 6px; }
+.perf-cell { background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+.perf-cell b { display: block; font-size: 16px; }
+.perf-cell span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; }

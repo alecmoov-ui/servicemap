@@ -42,7 +42,10 @@ change that makes CI red.**
 2. **Master station records (`is_master = 1`) can be edited but never deleted.** The
    delete route rejects them. Don't add a bypass.
 3. **Performance is derived, not stored as counters.** `computePerfMap()` aggregates
-   `service_events`. Don't add denormalized counter columns back to `stations`.
+   `dispatch_requests` (requests + outcomes: pending/accepted/not_needed/declined) and
+   `service_events` (completed tickets: value, flagged+flag_note, one_trip). Logging a
+   ticket auto-links the station's latest open request as accepted. Rates live in
+   `src/lib/ratings.js`. Don't add denormalized counter columns back to `stations`.
 4. **Stations can have several pins.** The row's own address/lat/lng/radius is the PRIMARY
    area; `service_areas` (JSON) holds extra `{label,address,city,state,zip,lat,lng,radiusMi}`
    pins. A pin covers its radius circle OR, when drawn, its outline (`coverage_polygon`

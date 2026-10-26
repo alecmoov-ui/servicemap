@@ -182,11 +182,23 @@ Maintain your station list in Excel and push updates in bulk (**Stations → Imp
   back by re-uploading it or restoring the snapshot (Backups). Imports are role-gated
   (Admin/DTM) and audited.
 
-### Service Log (manual analytics entry)
-Because dispatching happens in Zendesk, the team records outcomes here: one quick entry
-per resolved ticket (date, product, accepted?, completed?, days-to-complete, ticket #).
-Station performance and **all analytics are derived automatically** from these entries —
-no running totals to maintain by hand.
+### Dispatch requests & Service Log (performance tracking)
+Dispatching happens in Zendesk; the app records the outcomes so performance is measurable:
+- **Request dispatch** (Map & Dispatch result card, with a confirmation) adds one *dispatch
+  request* to the station. Its outcome is **pending** until either the completed ticket is
+  logged (auto-marks it *accepted*) or you click a chip: *Accepted* (sent), *Not needed*
+  (they accepted but another station got the job), *Declined* (no / no answer). Open
+  requests are listed at the top of the Map sidebar and on the station profile.
+- **Service Log** (Stations → Log) = one entry per **completed** ticket: date, ticket #,
+  product, **value of job** (what we paid), **one trip** checkbox, **flag** checkbox with a
+  required note. Logging implies accepted + completed and closes the station's latest open
+  request.
+- Derived per station (never stored as counters): requests, **acceptance rate**
+  (accepted + not-needed ÷ requests with an outcome), **completion rate** (completed ÷
+  accepted-and-sent), **value of jobs** + avg per job, **flags** + flag rate, **one-trip**
+  count + rate, and the reliability score (completion 35 · acceptance 20 · one-trip 20 ·
+  clean record 15 · volume 10; no history = 0). The station profile has a **Flags** history
+  with every note.
 
 ### Users (Admin / Territory Manager)
 Create team members with an email, password and role; every user is listed with their

@@ -5,10 +5,10 @@ import CopyCard from '../components/CopyCard.jsx'
 import { useApp } from '../lib/AppContext.jsx'
 import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
-import { PRODUCTS, reliabilityScore, acceptanceRate, completionRate } from '../lib/ratings.js'
+import { PRODUCTS, reliabilityScore, completionRate, flagRate, oneTripRate, pct } from '../lib/ratings.js'
 import { geocode } from '../lib/geocodeClient.js'
 import { stationStates, stationPins, countLabel, validPolygon } from '../lib/geo.js'
-import { REGIONS, region as regionInfo, fmtRadius, displayRadius, toMiles } from '../lib/units.js'
+import { REGIONS, region as regionInfo, fmtRadius, displayRadius, toMiles, fmtMoney } from '../lib/units.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
 const DOC_SLOTS = [
@@ -110,7 +110,7 @@ export default function StationsPage() {
             <thead>
               <tr>
                 <th>Company</th><th>City</th><th>{info.stateLabel}</th><th>Radius</th><th>Products</th>
-                <th>Score</th><th>Accept</th><th>Avg days</th><th>Status</th><th></th>
+                <th>Score</th><th>Requests</th><th>Done %</th><th>Flags</th><th>1-trip %</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -142,8 +142,10 @@ export default function StationsPage() {
                     ))}
                   </td>
                   <td><b>{reliabilityScore(s.perf)}</b></td>
-                  <td>{acceptanceRate(s.perf) != null ? Math.round(acceptanceRate(s.perf) * 100) + '%' : '—'}</td>
-                  <td>{s.perf.avgCompletionDays != null ? s.perf.avgCompletionDays : '—'}</td>
+                  <td>{s.perf?.dispatchRequests || 0}</td>
+                  <td>{pct(completionRate(s.perf))}</td>
+                  <td>{s.perf?.flags ? <span className="badge issue">{s.perf.flags}</span> : '0'}</td>
+                  <td>{pct(oneTripRate(s.perf))}</td>
                   <td><span className={'badge ' + s.status}>{s.status}</span></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {can(role, 'logService') && <button className="ghost small" onClick={() => setLogging(s)}>Log</button>}{' '}
@@ -336,10 +338,12 @@ function ImportModal({ region, onClose }) {
 
 // --- Service log -----------------------------------------------------------
 
-function ServiceLogModal({ station, onClose }) {
-  const { logServiceEvent, role } = useApp()
+function ServiceLogModal({ station: opened, onClose }) {
+  const { logServiceEvent, role, region, stations } = useApp()
+  const station = stations.find((x) => x.id === opened.id) || opened // live perf after each save
   const [events, setEvents] = useState([])
-  const [f, setF] = useState({ zendeskTicket: '', product: '', eventDate: new Date().toISOString().slice(0, 10), accepted: true, completed: false, completionDays: '', notes: '' })
+  const blank = { zendeskTicket: '', product: '', eventDate: new Date().toISOString().slice(0, 10), value: '', oneTrip: true, flagged: false, flagNote: '', notes: '' }
+  const [f, setF] = useState(blank)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }))
@@ -348,13 +352,11 @@ function ServiceLogModal({ station, onClose }) {
   useEffect(() => { load() }, [station.id])
 
   async function add() {
+    if (f.flagged && !f.flagNote.trim()) return setError('Add a short note describing the flag.')
     setBusy(true); setError(null)
     try {
-      await logServiceEvent(station.id, {
-        ...f,
-        completionDays: f.completed && f.completionDays !== '' ? Number(f.completionDays) : null,
-      })
-      setF((p) => ({ ...p, zendeskTicket: '', notes: '', completionDays: '' }))
+      await logServiceEvent(station.id, { ...f, value: f.value === '' ? null : Number(f.value) })
+      setF({ ...blank, product: f.product })
       load()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
@@ -370,52 +372,63 @@ function ServiceLogModal({ station, onClose }) {
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <h3>Service log — {station.company}</h3>
         <p className="muted">
-          Enter the outcome of a resolved Zendesk ticket. Performance metrics (acceptance %, completion %,
-          avg duration) and the map ranking update automatically.
+          One entry per <b>completed</b> Zendesk ticket (logging it counts as accepted + completed and closes the
+          station's open dispatch request). Enter what we paid, whether it took one trip, and flag any issue.
         </p>
 
         <div className="form-grid">
           <Field label="Zendesk ticket #"><input value={f.zendeskTicket} onChange={(e) => set('zendeskTicket', e.target.value)} placeholder="e.g. 14872" /></Field>
-          <Field label="Date sent"><input type="date" value={f.eventDate} onChange={(e) => set('eventDate', e.target.value)} /></Field>
+          <Field label="Date completed"><input type="date" value={f.eventDate} onChange={(e) => set('eventDate', e.target.value)} /></Field>
           <Field label="Product">
             <select value={f.product} onChange={(e) => set('product', e.target.value)}>
               <option value="">—</option>
               {PRODUCTS.map((p) => <option key={p.key} value={p.label}>{p.label}</option>)}
             </select>
           </Field>
-          <Field label="Days to complete"><input type="number" min="0" step="0.5" value={f.completionDays} onChange={(e) => set('completionDays', e.target.value)} disabled={!f.completed} /></Field>
+          <Field label={`Value of job (${region === 'CA' ? 'CAD' : 'USD'})`}>
+            <input type="number" min="0" step="0.01" value={f.value} onChange={(e) => set('value', e.target.value)} placeholder="what we paid the station" />
+          </Field>
         </div>
         <div className="product-grid" style={{ marginTop: 10 }}>
-          <label className={f.accepted ? 'chip active' : 'chip'}>
-            <input type="checkbox" hidden checked={f.accepted} onChange={(e) => set('accepted', e.target.checked)} /> Accepted
+          <label className={f.oneTrip ? 'chip active' : 'chip'} title="Job done in a single visit">
+            <input type="checkbox" hidden checked={f.oneTrip} onChange={(e) => set('oneTrip', e.target.checked)} /> ✓ One trip
           </label>
-          <label className={f.completed ? 'chip active' : 'chip'}>
-            <input type="checkbox" hidden checked={f.completed} onChange={(e) => set('completed', e.target.checked)} /> Completed
+          <label className={f.flagged ? 'chip active flag' : 'chip'} title="Mark an issue or dissatisfaction with this job">
+            <input type="checkbox" hidden checked={f.flagged} onChange={(e) => set('flagged', e.target.checked)} /> ⚑ Flag an issue
           </label>
         </div>
+        {f.flagged && (
+          <Field label="What went wrong? (required for a flag)">
+            <input value={f.flagNote} onChange={(e) => set('flagNote', e.target.value)} placeholder="e.g. second visit needed, customer complaint, late" autoFocus />
+          </Field>
+        )}
         <Field label="Notes"><input value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="optional" /></Field>
         {error && <div className="error">{error}</div>}
         <div className="modal-actions">
           <button className="ghost" onClick={onClose}>Close</button>
-          <button className="primary" onClick={add} disabled={busy}>{busy ? 'Saving…' : 'Add log entry'}</button>
+          <button className="primary" onClick={add} disabled={busy}>{busy ? 'Saving…' : 'Add completed ticket'}</button>
         </div>
 
-        <div className="label-row">Recent entries ({events.length})</div>
-        <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto' }}>
+        <div className="label-row">
+          Logged tickets ({events.length})
+          <span className="muted"> · {fmtMoney(station.perf?.totalValue, region)} total · {pct(oneTripRate(station.perf))} one trip · {station.perf?.flags || 0} flag{station.perf?.flags === 1 ? '' : 's'} ({pct(flagRate(station.perf))})</span>
+        </div>
+        <div className="table-wrap" style={{ maxHeight: 240, overflowY: 'auto' }}>
           <table className="table">
-            <thead><tr><th>Date</th><th>Ticket</th><th>Product</th><th>Outcome</th><th>Days</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Ticket</th><th>Product</th><th className="num">Value</th><th>One trip</th><th>Flag</th><th></th></tr></thead>
             <tbody>
               {events.map((e) => (
                 <tr key={e.id}>
                   <td>{e.eventDate}</td>
                   <td>{e.zendeskTicket || '—'}</td>
                   <td>{e.product || '—'}</td>
-                  <td>{e.accepted ? (e.completed ? 'Completed' : 'Accepted') : 'Declined'}</td>
-                  <td>{e.completionDays ?? '—'}</td>
+                  <td className="num">{e.value != null ? fmtMoney(e.value, region, { cents: true }) : '—'}</td>
+                  <td>{e.oneTrip ? '✓' : '—'}</td>
+                  <td>{e.flagged ? <span className="badge issue" title={e.flagNote}>⚑ {e.flagNote}</span> : '—'}</td>
                   <td>{can(role, 'logService') && <button className="ghost small" onClick={() => remove(e.id)}>✕</button>}</td>
                 </tr>
               ))}
-              {events.length === 0 && <tr><td colSpan={6} className="muted" style={{ padding: 12 }}>No entries yet.</td></tr>}
+              {events.length === 0 && <tr><td colSpan={7} className="muted" style={{ padding: 12 }}>No tickets logged yet.</td></tr>}
             </tbody>
           </table>
         </div>

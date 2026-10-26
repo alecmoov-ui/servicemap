@@ -55,7 +55,14 @@ export const api = {
   deleteStation: (id) => request(`/stations/${id}`, { method: 'DELETE' }),
   mergeStations: (targetId, sourceIds) => request(`/stations/${targetId}/merge`, { method: 'POST', body: { sourceIds } }),
 
-  // Service log (manual performance entry)
+  // Dispatch requests (Map & Dispatch "Request dispatch" + outcomes)
+  getOpenRequests: (country) => request(`/stations/requests/open?country=${country}`),
+  getRequests: (id) => request(`/stations/${id}/requests`),
+  createRequest: (id, body) => request(`/stations/${id}/requests`, { method: 'POST', body }),
+  setRequestOutcome: (id, rid, outcome, note) => request(`/stations/${id}/requests/${rid}`, { method: 'PUT', body: { outcome, note } }),
+  deleteRequest: (id, rid) => request(`/stations/${id}/requests/${rid}`, { method: 'DELETE' }),
+
+  // Service log (completed tickets)
   getServiceEvents: (id) => request(`/stations/${id}/service-events`),
   logServiceEvent: (id, e) => request(`/stations/${id}/service-events`, { method: 'POST', body: e }),
   deleteServiceEvent: (id, eventId) => request(`/stations/${id}/service-events/${eventId}`, { method: 'DELETE' }),
