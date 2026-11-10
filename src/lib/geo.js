@@ -78,3 +78,14 @@ export function countLabel(stations, state) {
   const n = stations.length
   return `${pins} location${pins !== 1 ? 's' : ''} (${n} station${n !== 1 ? 's' : ''})`
 }
+
+// Rectangle outline around a point from distances in MILES: { n, s, e, w }.
+// Returns [[lat,lng],...] (NW, NE, SE, SW). 1 mile of latitude ≈ 1/69 degree; a mile
+// of longitude shrinks with cos(latitude). Good to well under 1% at service-area scale.
+export function rectangleAround(lat, lng, { n = 0, s = 0, e = 0, w = 0 }) {
+  const dLat = (mi) => mi / 69.0
+  const dLng = (mi) => mi / (69.17 * Math.cos((lat * Math.PI) / 180))
+  const r = (v) => Math.round(v * 1e5) / 1e5
+  const north = lat + dLat(n), south = lat - dLat(s), east = lng + dLng(e), west = lng - dLng(w)
+  return [[r(north), r(west)], [r(north), r(east)], [r(south), r(east)], [r(south), r(west)]]
+}

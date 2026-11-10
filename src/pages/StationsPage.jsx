@@ -7,7 +7,7 @@ import { api } from '../lib/api.js'
 import { can } from '../lib/roles.js'
 import { PRODUCTS, reliabilityScore, completionRate, flagRate, oneTripRate, pct } from '../lib/ratings.js'
 import { geocode } from '../lib/geocodeClient.js'
-import { stationStates, stationPins, countLabel, validPolygon } from '../lib/geo.js'
+import { stationStates, stationPins, countLabel, validPolygon, rectangleAround } from '../lib/geo.js'
 import { REGIONS, region as regionInfo, fmtRadius, displayRadius, toMiles, fmtMoney } from '../lib/units.js'
 import LocatePreview from '../components/LocatePreview.jsx'
 
@@ -543,6 +543,16 @@ function StationForm({ station, onClose }) {
   const removeOutline = (target) => setPolygon(target, [])
   const hasOutline = (target) => polygonOf(target).length >= 3
   const drawLabel = drawTarget === 'primary' ? 'the primary address' : drawTarget != null ? `service area ${drawTarget + 1}` : ''
+  // "Outline by distances": N/S/E/W from the address (in the region's unit) -> rectangle outline.
+  const [distOpen, setDistOpen] = useState(false)
+  const [dist, setDist] = useState({ n: '', s: '', e: '', w: '' })
+  const applyDistances = () => {
+    const lat = parseFloat(f.lat), lng = parseFloat(f.lng)
+    const mi = Object.fromEntries(Object.entries(dist).map(([k, v]) => [k, Number(toMiles(v, country)) || 0]))
+    if (!(mi.n + mi.s) || !(mi.e + mi.w)) return alert('Enter a distance for north and/or south, and for east and/or west.')
+    setPolygon('primary', rectangleAround(lat, lng, mi))
+    setDistOpen(false)
+  }
   const [error, setError] = useState(null)
   const [locating, setLocating] = useState(false)
   const [geoMsg, setGeoMsg] = useState(null)
@@ -715,11 +725,29 @@ function StationForm({ station, onClose }) {
               ✏️ {hasOutline('primary') ? 'Edit coverage outline' : 'Draw coverage outline'}
             </button>
           )}
+          {drawTarget == null && (
+            <button type="button" className="ghost" onClick={() => setDistOpen((v) => !v)} disabled={!(parseFloat(f.lat) && parseFloat(f.lng))}
+              title="Build the outline from distances north / south / east / west of the address">
+              📐 Outline by distances
+            </button>
+          )}
           {drawTarget == null && hasOutline('primary') && (
             <button type="button" className="ghost" onClick={() => removeOutline('primary')}>Remove outline (use radius)</button>
           )}
           {geoMsg && <span className="muted">{geoMsg}</span>}
         </div>
+        {distOpen && drawTarget == null && (
+          <div className="draw-toolbar">
+            <span><b>Outline by distances</b> from the pinned address, in {cinfo.unit === 'km' ? 'km' : 'miles'} (e.g. "60 south, 40 north, 30 west"). Leave a side blank for 0.</span>
+            <div className="dist-grid">
+              {[['n', 'North'], ['s', 'South'], ['e', 'East'], ['w', 'West']].map(([k, label]) => (
+                <label key={k} className="field"><span>{label}</span><input type="number" min="0" value={dist[k]} onChange={(ev) => setDist((d) => ({ ...d, [k]: ev.target.value }))} placeholder="0" /></label>
+              ))}
+            </div>
+            <button type="button" className="ghost small" onClick={() => setDistOpen(false)}>Cancel</button>
+            <button type="button" className="primary small" onClick={applyDistances}>Apply outline</button>
+          </div>
+        )}
         {drawTarget != null && (
           <div className="draw-toolbar">
             <span><b>Drawing outline for {drawLabel}.</b> Zoom in, then click the map to drop corner points around the coverage area ({draft.length} point{draft.length !== 1 ? 's' : ''}; 3+ needed).</span>

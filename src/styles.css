@@ -298,3 +298,5 @@ code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 1
 .perf-cell b { display: block; font-size: 16px; }
 .perf-cell span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.dist-grid { display: grid; grid-template-columns: repeat(4, 90px); gap: 8px; }
+.dist-grid .field input { padding: 5px 8px; }

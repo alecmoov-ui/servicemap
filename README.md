@@ -140,8 +140,10 @@ radius, products, HVAC/EPA 608, insurance, parts capacity). Per station you can:
   Service Contract, Schedule A, HVAC License, Proof of Insurance.
 - **Coverage outline instead of a radius:** next to *Locate* there is **Draw coverage
   outline** — zoom in and click corner points around the area the station actually
-  covers. The outline replaces the circle for that pin (search, coverage, map); remove it
-  to go back to a radius. Additional service areas have the same ✏️ option per row.
+  covers, or **Outline by distances** — enter miles/km north, south, east and west of the
+  address (e.g. "60 south, 40 north, 30 west") and the rectangle is drawn for you. The
+  outline replaces the circle for that pin (search, coverage, map); remove it to go back to
+  a radius. Additional service areas have the same ✏️ option per row.
 - **Station profile:** click a company name in the list, the **Station profile →** button
   on a Map result card, or the link in any map pin popup to open a read-only view of
   everything on file (contacts, addresses, licensing, documents, locations, service log).
